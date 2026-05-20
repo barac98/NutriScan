@@ -76,6 +76,15 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
           border: none !important;
           background: transparent !important;
         }
+        /* Completely hide the white scanner square/borders drawn by the html5-qrcode library */
+        #barcode-reader div,
+        #barcode-reader span,
+        #barcode-reader svg,
+        #barcode-reader__scan_region {
+          border: none !important;
+          border-width: 0px !important;
+          outline: none !important;
+        }
         #barcode-reader video {
           border-radius: 20px;
           object-fit: cover !important;
