@@ -1,0 +1,24 @@
+{
+  "short_name": "NutriScan",
+  "name": "NutriScan RO",
+  "description": "Scanează produsele supermarketului pentru informații nutriționale, alergeni și sustenabilitate în limba română.",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f1115",
+  "theme_color": "#10b981",
+  "display": "standalone",
+  "orientation": "portrait"
+}
