@@ -52,9 +52,9 @@ export default async function handler(req: any, res: any) {
       model: "gemini-3.5-flash",
       contents: { parts: contents },
       config: {
-        systemInstruction: "Ești un expert nutriționist român de elită. Analizezi produse alimentare din imagini, coduri de bare sau text de ingrediente. Răspunsurile tale sunt extrem de concise, scurte și precise, limitate la câteva cuvinte pe fiecare câmp. NU genera eseuri sau texte repetitive. Limba de răspuns este exclusiv Română. Răspunde strict în format JSON.",
+        systemInstruction: "Ești un expert nutriționist român de elită. Analizezi produse alimentare din imagini, coduri de bare sau text de ingrediente. Răspunsurile tale sunt extrem de concise, scurte și precise, limitate la câteva cuvinte pe fiecare câmp. NU genera eseuri sau texte repetitive. Limba de răspuns este exclusiv Română. Răspunde strict în format JSON conform schemei furnizate.",
         responseMimeType: "application/json",
-        maxOutputTokens: 1000,
+        maxOutputTokens: 2048,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -79,7 +79,8 @@ export default async function handler(req: any, res: any) {
                 carbs: { type: Type.STRING, description: "Cifra + g, ex: 25g. Folosește '-' dacă nu este detaliat." },
                 protein: { type: Type.STRING, description: "Cifra + g, ex: 3g. Folosește '-' dacă nu este detaliat." },
                 salt: { type: Type.STRING, description: "Cifra + g, ex: 0.2g. Folosește '-' dacă nu este detaliat." }
-              }
+              },
+              required: ["energy", "fat", "carbs", "protein", "salt"]
             },
             allergens: { 
               type: Type.ARRAY, 
@@ -107,7 +108,8 @@ export default async function handler(req: any, res: any) {
               items: { type: Type.STRING },
               description: "2 alternative mai sănătoase din aceeași categorie."
             }
-          }
+          },
+          required: ["name", "brand", "ingredients", "nutrition", "allergens", "healthAssessment", "healthScore", "origin", "sustainability", "alternatives"]
         }
       },
     });

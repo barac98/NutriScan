@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 
 interface ScannerProps {
   onScan: (barcode: string) => void;
-  onImageCapture: (base64: string) => void;
+  onImageCapture: (file: File) => void;
   onClose: () => void;
 }
 
@@ -34,14 +34,7 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      const base64 = base64String.split(",")[1];
-      onImageCapture(base64);
-    };
-    reader.readAsDataURL(file);
+    onImageCapture(file);
   };
 
   return (

@@ -16,6 +16,7 @@ import { auth, db } from "./lib/firebase";
 import { Product, HistoryItem, ShoppingItem } from "./types";
 import Scanner from "./components/Scanner";
 import ProductDetail from "./components/ProductDetail";
+import { processAndEnhanceImage } from "./lib/imageProcessor";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -23,6 +24,7 @@ export default function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
+  const [imageWarning, setImageWarning] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,17 +107,28 @@ export default function App() {
     }
   };
 
+  const handleCapturedFile = async (file: File) => {
+    setAnalyzing(true);
+    setShowScanner(false);
+    try {
+      const enhanced = await processAndEnhanceImage(file);
+      if (enhanced.isBlurry) {
+        setImageWarning("Imaginea are claritate scăzută. Am aplicat filtre automate de contrast și de contur, dar recomandăm o imagine mai stabilă și focalizată.");
+      } else {
+        setImageWarning(null);
+      }
+      await analyzeProduct({ image: enhanced.base64 });
+    } catch (err) {
+      console.error("Error processing file:", err);
+      alert("Nu s-a putut procesa imaginea. Te rugăm să încerci din nou.");
+      setAnalyzing(false);
+    }
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      const base64 = base64String.split(",")[1];
-      analyzeProduct({ image: base64 });
-    };
-    reader.readAsDataURL(file);
+    handleCapturedFile(file);
   };
 
   const addToShoppingList = async (name: string, barcode?: string) => {
@@ -181,6 +194,22 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="p-6 space-y-6"
             >
+              {/* Blurry Contrast Warning Alert */}
+              {imageWarning && (
+                <div className="card-elegant bg-yellow-500/10 border-yellow-500/20 p-4 flex items-start gap-3 relative text-yellow-500 text-xs font-semibold relative">
+                  <span className="text-base leading-none">⚠️</span>
+                  <div className="flex-1 pr-6 leading-relaxed">
+                    {imageWarning}
+                  </div>
+                  <button 
+                    onClick={() => setImageWarning(null)} 
+                    className="absolute top-3 right-3 text-yellow-500/50 hover:text-yellow-400 font-bold text-sm cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
               {/* Promo Banner */}
               <div className="card-elegant bg-emerald-500/10 border-emerald-500/20 p-5 flex items-center gap-4">
                 <div className="bg-emerald-500/20 p-3 rounded-2xl">
@@ -413,7 +442,7 @@ export default function App() {
         {showScanner && (
           <Scanner 
             onScan={(code) => analyzeProduct({ barcode: code })} 
-            onImageCapture={(img) => analyzeProduct({ image: img })}
+            onImageCapture={handleCapturedFile}
             onClose={() => setShowScanner(false)} 
           />
         )}
