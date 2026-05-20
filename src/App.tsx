@@ -17,6 +17,7 @@ import { Product, HistoryItem, ShoppingItem } from "./types";
 import Scanner from "./components/Scanner";
 import ProductDetail from "./components/ProductDetail";
 import { processAndEnhanceImage } from "./lib/imageProcessor";
+import { haptics } from "./lib/haptics";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,6 +29,11 @@ export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleTabChange = (tab: "scan" | "history" | "list" | "settings") => {
+    haptics.playSelect();
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -69,10 +75,14 @@ export default function App() {
     };
   }, [user]);
 
-  const login = () => signInWithPopup(auth, new GoogleAuthProvider());
+  const login = () => {
+    haptics.playClick();
+    signInWithPopup(auth, new GoogleAuthProvider());
+  };
   const logout = () => {
+    haptics.playClick();
     signOut(auth);
-    setActiveTab("scan");
+    handleTabChange("scan");
   };
 
   const analyzeProduct = async (data: { barcode?: string; image?: string }) => {
@@ -146,10 +156,12 @@ export default function App() {
   };
 
   const toggleShopItem = async (id: string, checked: boolean) => {
+    haptics.playSelect();
     await updateDoc(doc(db, "shoppingLists", id), { checked: !checked });
   };
 
   const deleteShopItem = async (id: string) => {
+    haptics.playClick();
     await deleteDoc(doc(db, "shoppingLists", id));
   };
 
@@ -224,10 +236,13 @@ export default function App() {
               {/* Main Actions */}
               <div className="space-y-4">
                 <button 
-                  onClick={() => setShowScanner(true)}
-                  className="w-full btn-elegant py-5 text-sm uppercase tracking-widest"
+                  onClick={() => {
+                    haptics.playClick();
+                    setShowScanner(true);
+                  }}
+                  className="w-full btn-elegant py-5 text-xs font-black uppercase tracking-widest active:scale-98 shadow-lg shadow-emerald-500/10 cursor-pointer"
                 >
-                  <Scan size={20} /> Începe Scanarea
+                  <Scan size={18} className="stroke-[2.5]" /> Începe Scanarea
                 </button>
 
                 <div className="relative">
@@ -240,9 +255,9 @@ export default function App() {
                   />
                   <label 
                     htmlFor="image-file-upload"
-                    className="w-full btn-elegant-outline py-4 text-xs uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2"
+                    className="w-full btn-elegant-outline py-4 text-xs font-black uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2 active:scale-98 transition-all border border-white/10"
                   >
-                    <Upload size={16} /> Încarcă o Imagine
+                    <Upload size={16} className="text-emerald-400" /> Încarcă o Imagine
                   </label>
                 </div>
                 
@@ -324,21 +339,35 @@ export default function App() {
               
               {user && (
                 <div className="space-y-3">
-                  <div className="flex gap-2">
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const input = form.elements.namedItem("itemName") as HTMLInputElement;
+                      if (input && input.value.trim()) {
+                        haptics.playClick();
+                        addToShoppingList(input.value.trim());
+                        input.value = '';
+                      }
+                    }}
+                    className="flex gap-2"
+                  >
                     <div className="flex-1">
                       <input 
+                        name="itemName"
                         type="text" 
-                        placeholder="Adaugă un articol..." 
-                        className="input-elegant py-3 text-sm"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            addToShoppingList(e.currentTarget.value);
-                            e.currentTarget.value = '';
-                          }
-                        }}
+                        required
+                        placeholder="Adaugă articol în listă..." 
+                        className="input-elegant py-3 px-4 text-xs h-12 border border-white/10"
                       />
                     </div>
-                  </div>
+                    <button 
+                      type="submit" 
+                      className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center text-[#0f1115] hover:bg-emerald-400 active:scale-95 transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
+                    >
+                      <Plus size={18} className="stroke-[3]" />
+                    </button>
+                  </form>
 
                   <div className="space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
                     {shoppingList.map((item) => (
@@ -459,11 +488,11 @@ export default function App() {
       </AnimatePresence>
 
       {/* Nav Bar */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-[#1c1f26]/80 backdrop-blur-xl border-t border-white/10 flex justify-around p-4 z-40">
-        <NavButton active={activeTab === "scan"} onClick={() => setActiveTab("scan")} icon={<Scan size={20} />} label="Scan" />
-        <NavButton active={activeTab === "history"} onClick={() => setActiveTab("history")} icon={<HistoryIcon size={20} />} label="Istoric" />
-        <NavButton active={activeTab === "list"} onClick={() => setActiveTab("list")} icon={<ShoppingCart size={20} />} label="Listă" />
-        <NavButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")} icon={<SettingsIcon size={20} />} label="Profil" />
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-[#1c1f26]/90 backdrop-blur-2xl border-t border-white/10 flex justify-around pt-3 pb-6 px-4 z-40 rounded-t-[24px] shadow-[0_-12px_30px_rgba(0,0,0,0.4)]">
+        <NavButton active={activeTab === "scan"} onClick={() => handleTabChange("scan")} icon={<Scan size={20} />} label="Scan" />
+        <NavButton active={activeTab === "history"} onClick={() => handleTabChange("history")} icon={<HistoryIcon size={20} />} label="Istoric" />
+        <NavButton active={activeTab === "list"} onClick={() => handleTabChange("list")} icon={<ShoppingCart size={20} />} label="Listă" />
+        <NavButton active={activeTab === "settings"} onClick={() => handleTabChange("settings")} icon={<SettingsIcon size={20} />} label="Profil" />
       </nav>
     </div>
   );
