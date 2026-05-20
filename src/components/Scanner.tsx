@@ -69,14 +69,8 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
           border: none !important;
           background: transparent !important;
         }
-        /* Hide all helper texts, instructions, permissions links, or camera status logs that html5-qrcode outputs */
+        /* Hide only specific unwanted texts, swap links, and status headers that html5-qrcode outputs */
         #barcode-reader a,
-        #barcode-reader span,
-        #barcode-reader h1,
-        #barcode-reader h2,
-        #barcode-reader h3,
-        #barcode-reader pBack,
-        #barcode-reader div:not(#barcode-reader__render_start_button),
         #barcode-reader__status_span,
         #barcode-reader__header_message {
           display: none !important;
@@ -85,10 +79,9 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
           text-decoration: none !important;
         }
         /* Completely hide the white scanner square/borders drawn by the html5-qrcode library */
-        #barcode-reader div,
-        #barcode-reader span,
-        #barcode-reader svg,
-        #barcode-reader__scan_region {
+        #barcode-reader__scan_region div,
+        #barcode-reader__scan_region span,
+        #barcode-reader__scan_region svg {
           border: none !important;
           border-width: 0px !important;
           outline: none !important;
