@@ -12,6 +12,10 @@ interface ProductDetailProps {
 }
 
 export default function ProductDetail({ product, onClose, onAddToShoppingList }: ProductDetailProps) {
+  const allergens = product?.allergens || [];
+  const alternatives = product?.alternatives || [];
+  const nutrition = product?.nutrition || {};
+
   const getScoreColor = (score: number) => {
     if (score >= 70) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
     if (score >= 40) return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
@@ -65,7 +69,7 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList }:
         <div className="bg-[#1c1f26] rounded-2xl p-4 border border-white/5 space-y-4">
            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Profil Nutrițional / 100g</p>
            <div className="grid grid-cols-3 gap-4 text-center">
-             {Object.entries(product.nutrition).map(([key, value]) => (
+             {Object.entries(nutrition).map(([key, value]) => (
                <div key={key} className="space-y-1">
                  <span className="block text-[9px] font-bold uppercase text-slate-500">{key}</span>
                  <span className="block font-bold text-white text-sm">{value || "-"}</span>
@@ -89,14 +93,14 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList }:
         )}
 
         {/* Allergens */}
-        {product.allergens.length > 0 && (
+        {allergens.length > 0 && (
           <div className="card-elegant bg-rose-500/5 border-rose-500/10">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle size={16} className="text-rose-400" />
               <h4 className="text-[10px] font-bold uppercase tracking-widest text-rose-400">Alergeni Detectați</h4>
             </div>
             <div className="flex flex-wrap gap-2">
-              {product.allergens.map((all) => (
+              {allergens.map((all) => (
                 <span key={all} className="px-2 py-1 bg-rose-500/20 border border-rose-500/20 rounded-md text-[10px] font-bold uppercase text-rose-200">
                   {all}
                 </span>
@@ -129,7 +133,7 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList }:
         {/* Alternatives */}
         <div className="space-y-3">
           <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 pl-2">Alternative Premium</h4>
-          {product.alternatives.map((alt) => (
+          {alternatives.map((alt) => (
             <div key={alt} className="card-elegant bg-white/5 border-white/5 py-3 px-4 flex items-center justify-between group hover:bg-white/10 transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-white/10 rounded-lg" />
