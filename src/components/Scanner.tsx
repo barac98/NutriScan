@@ -50,13 +50,6 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
     };
   }, [onScan]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    haptics.playSelect();
-    const file = e.target.files?.[0];
-    if (!file) return;
-    onImageCapture(file);
-  };
-
   const handleCloseTap = () => {
     haptics.playClick();
     onClose();
@@ -75,6 +68,21 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
         #barcode-reader {
           border: none !important;
           background: transparent !important;
+        }
+        /* Hide all helper texts, instructions, permissions links, or camera status logs that html5-qrcode outputs */
+        #barcode-reader a,
+        #barcode-reader span,
+        #barcode-reader h1,
+        #barcode-reader h2,
+        #barcode-reader h3,
+        #barcode-reader pBack,
+        #barcode-reader div:not(#barcode-reader__render_start_button),
+        #barcode-reader__status_span,
+        #barcode-reader__header_message {
+          display: none !important;
+          border: none !important;
+          outline: none !important;
+          text-decoration: none !important;
         }
         /* Completely hide the white scanner square/borders drawn by the html5-qrcode library */
         #barcode-reader div,
@@ -169,23 +177,6 @@ export default function Scanner({ onScan, onImageCapture, onClose }: ScannerProp
 
         <div className="text-center text-slate-400 leading-relaxed max-w-[280px] mx-auto text-[11px] font-bold uppercase tracking-widest px-2">
           Centrați codul de bare în vizor pentru scanare automată rapidă
-        </div>
-
-        {/* Upload Action Trigger */}
-        <div className="relative mt-2">
-          <input 
-            type="file" 
-            accept="image/*" 
-            onChange={handleFileChange} 
-            className="hidden" 
-            id="scanner-file-upload" 
-          />
-          <label 
-            htmlFor="scanner-file-upload"
-            className="w-full btn-elegant-outline py-4 text-xs uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2 border border-white/10 active:scale-95 bg-[#1c1f26] text-white font-black"
-          >
-            <Upload size={16} className="text-emerald-400" /> Sau încarcă o imagine
-          </label>
         </div>
       </div>
     </motion.div>
