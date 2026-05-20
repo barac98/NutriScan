@@ -1,0 +1,8 @@
+{
+  "name": "NutriScan RO",
+  "description": "Scanează produsele supermarketului pentru informații nutriționale, alergeni și sustenabilitate în limba română.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

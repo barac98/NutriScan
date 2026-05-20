@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and preferences",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "allergens": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Information about a product based on barcode or label scan",
+      "type": "object",
+      "properties": {
+        "barcode": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": "string" },
+        "ingredients": { "type": "string" },
+        "nutrition": {
+          "type": "object",
+          "properties": {
+            "energy": { "type": "string" },
+            "fat": { "type": "string" },
+            "carbs": { "type": "string" },
+            "protein": { "type": "string" },
+            "salt": { "type": "string" }
+          }
+        },
+        "allergens": { "type": "array", "items": { "type": "string" } },
+        "healthAssessment": { "type": "string" },
+        "healthScore": { "type": "number" },
+        "origin": { "type": "string" },
+        "sustainability": { "type": "string" },
+        "alternatives": { "type": "array", "items": { "type": "string" } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "History": {
+      "title": "History",
+      "description": "User scan history",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "barcode": { "type": "string" },
+        "productName": { "type": "string" },
+        "healthScore": { "type": "number" },
+        "scannedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "barcode", "scannedAt"]
+    },
+    "ShoppingListItem": {
+      "title": "Shopping List Item",
+      "description": "An item in the user's shopping list",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "barcode": { "type": "string" },
+        "checked": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Product review from a user",
+      "type": "object",
+      "properties": {
+        "barcode": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Individual user settings"
+    },
+    "/products/{barcode}": {
+      "schema": "Product",
+      "description": "Cached product data"
+    },
+    "/histories/{historyId}": {
+      "schema": "History",
+      "description": "User's product scan history"
+    },
+    "/shoppingLists/{itemId}": {
+      "schema": "ShoppingListItem",
+      "description": "User's shopping list items"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "User product reviews"
+    }
+  }
+}

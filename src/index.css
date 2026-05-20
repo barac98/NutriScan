@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0f1115] text-slate-200 font-sans;
+  }
+}
+
+/* Elegant Dark design utility classes */
+@layer components {
+  .btn-elegant {
+    @apply px-6 py-3 rounded-xl bg-emerald-500 text-[#0f1115] font-bold transition-all duration-200 
+           hover:bg-emerald-400 active:scale-95 flex items-center justify-center gap-2;
+  }
+
+  .btn-elegant-outline {
+    @apply px-6 py-3 rounded-xl border border-white/10 bg-white/5 text-white font-bold transition-all duration-200 
+           hover:bg-white/10 active:scale-95 flex items-center justify-center gap-2;
+  }
+  
+  .card-elegant {
+    @apply bg-[#1c1f26] rounded-3xl p-6 border border-white/5 shadow-xl;
+  }
+  
+  .input-elegant {
+    @apply w-full bg-white/5 border border-white/10 rounded-xl py-3 px-5 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    @apply w-1;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-white/5;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+}
+

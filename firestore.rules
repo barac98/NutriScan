@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- User Profile ---
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+      
+      function isValidUser(data) {
+        return data.keys().hasAll(['email']) &&
+               data.email is string && data.email.size() <= 200;
+      }
+    }
+
+    // --- Products (Cache) ---
+    // Anyone can read products. Only signed in users can create/update (AI will populate via server, but we allow client write for simplicity in this demo, usually it would be restricted or validated)
+    match /products/{barcode} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidProduct(request.resource.data);
+
+      function isValidProduct(data) {
+        return data.keys().hasAll(['barcode', 'name']) &&
+               data.barcode is string && data.barcode.size() <= 50;
+      }
+    }
+
+    // --- History ---
+    match /histories/{historyId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidHistory(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      function isValidHistory(data) {
+        return data.keys().hasAll(['userId', 'barcode', 'scannedAt']) &&
+               data.userId == request.auth.uid &&
+               data.barcode is string &&
+               data.scannedAt is string;
+      }
+    }
+
+    // --- Shopping Lists ---
+    match /shoppingLists/{itemId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidShoppingItem(request.resource.data);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidShoppingItem(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      function isValidShoppingItem(data) {
+        return data.userId == request.auth.uid &&
+               data.name is string && data.name.size() <= 200;
+      }
+    }
+
+    // --- Reviews ---
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidReview(request.resource.data);
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      function isValidReview(data) {
+        return data.userId == request.auth.uid &&
+               data.barcode is string &&
+               data.rating is number && data.rating >= 1 && data.rating <= 5;
+      }
+    }
+  }
+}
