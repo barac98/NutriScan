@@ -26,12 +26,56 @@ app.post("/api/analyze-product", async (req, res) => {
   const { image, barcode, ingredientsText } = req.body;
 
   try {
-    let prompt = "Analizează acest produs alimentar.";
+    let openFoodFactsData: any = null;
+
     if (barcode) {
-      prompt += `\nCod de bare: ${barcode}`;
+      try {
+        console.log(`Fetching from Open Food Facts for barcode: ${barcode}`);
+        // Fetch product information by barcode from open food facts
+        const offRes = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`, {
+          headers: {
+            'User-Agent': 'NutriScanRO - WebApp - Version 1.0.0 (baracsammuel@gmail.com)'
+          }
+        });
+        if (offRes.ok) {
+          const offJson: any = await offRes.json();
+          if (offJson.status === 1 && offJson.product) {
+            openFoodFactsData = offJson.product;
+            console.log(`Successfully found product on Open Food Facts: ${offJson.product.product_name || "unnamed"}`);
+          }
+        }
+      } catch (err) {
+        console.error("Open Food Facts fetch error:", err);
+      }
     }
-    if (ingredientsText) {
-      prompt += `\nText ingrediente: ${ingredientsText}`;
+
+    let prompt = "Analizează acest produs alimentar.";
+    
+    if (openFoodFactsData) {
+      // Ground Gemini's expert analysis with verified Open Food Facts data
+      prompt += `\nAm găsit date oficiale în baza de date Open Food Facts:
+- Nume Produs: ${openFoodFactsData.product_name_ro || openFoodFactsData.product_name || 'Necunoscut / Identificat greșit'}
+- Brand/Marcă: ${openFoodFactsData.brands || 'Necunoscut'}
+- Ingrediente înregistrate: ${openFoodFactsData.ingredients_text_ro || openFoodFactsData.ingredients_text || 'Informații ingrediente nedisponibile direct'}
+- Nutriție per 100g/ml:
+  * Energie Kcal: ${openFoodFactsData.nutriments?.['energy-kcal_100g'] ?? openFoodFactsData.nutriments?.['energy-kcal'] ?? openFoodFactsData.nutriments?.['energy_100g'] ?? '-'}
+  * Grăsimi total: ${openFoodFactsData.nutriments?.fat_100g ?? openFoodFactsData.nutriments?.fat ?? '-'}g
+  * Carbohidrați total: ${openFoodFactsData.nutriments?.carbohydrates_100g ?? openFoodFactsData.nutriments?.carbohydrates ?? '-'}g
+  * Proteine: ${openFoodFactsData.nutriments?.proteins_100g ?? openFoodFactsData.nutriments?.proteins ?? '-'}g
+  * Sare: ${openFoodFactsData.nutriments?.salt_100g ?? openFoodFactsData.nutriments?.salt ?? '-'}g
+- Alergeni: ${openFoodFactsData.allergens || openFoodFactsData.allergens_from_ingredients || openFoodFactsData.allergens_tags?.join(', ') || 'Niciunul identificat'}
+- Țară Origină/Fabricare: ${openFoodFactsData.origins || openFoodFactsData.countries || 'Necunoscută'}
+- Ambalaj/Sustenabilitate: ${openFoodFactsData.packaging || openFoodFactsData.packaging_text || 'Ambalaj nereclamat ca reciclabil'}
+
+Notează acest cod de bare real pentru stocare: ${barcode || 'N/A'}.
+Te rog folosește aceste date ultra-sigure de analiză ca bază de pornire certă. Notează că scorul de sănătate (healthScore), evaluarea nutrițională românească (healthAssessment) și alternativele optime (reale, vândute în mod obișnuit în Europa) trebuie calculate de tine profesionist și obiectiv pe baza datelor nutriționale de mai sus.`;
+    } else {
+      if (barcode) {
+        prompt += `\nCod de bare: ${barcode}`;
+      }
+      if (ingredientsText) {
+        prompt += `\nText ingrediente: ${ingredientsText}`;
+      }
     }
 
     const contents: any[] = [{ text: prompt }];

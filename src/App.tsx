@@ -29,6 +29,7 @@ export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scanMode, setScanMode] = useState<"camera" | "upload">("camera");
 
   const handleTabChange = (tab: "scan" | "history" | "list" | "settings") => {
     haptics.playSelect();
@@ -233,35 +234,102 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Main Actions */}
-              <div className="space-y-4">
-                <button 
+              {/* Main Actions Wrapper Container */}
+              <div className="space-y-6">
+                {/* Segmented Mode Selector Switch */}
+                <div className="flex bg-[#1c1f26]/60 p-1 rounded-2xl border border-white/5 shadow-inner">
+                <button
                   onClick={() => {
-                    haptics.playClick();
-                    setShowScanner(true);
+                    haptics.playSelect();
+                    setScanMode("camera");
                   }}
-                  className="w-full btn-elegant py-5 text-xs font-black uppercase tracking-widest active:scale-98 shadow-lg shadow-emerald-500/10 cursor-pointer"
+                  className={`flex-1 py-3 text-center text-[10px] font-black uppercase tracking-widest rounded-xl transition-all cursor-pointer ${
+                    scanMode === "camera"
+                      ? "bg-emerald-500 text-[#0f1115] shadow-lg shadow-emerald-500/10"
+                      : "text-slate-400 hover:text-white"
+                  }`}
                 >
-                  <Scan size={18} className="stroke-[2.5]" /> Începe Scanarea
+                  📸 Scanare Cameră
                 </button>
+                <button
+                  onClick={() => {
+                    haptics.playSelect();
+                    setScanMode("upload");
+                  }}
+                  className={`flex-1 py-3 text-center text-[10px] font-black uppercase tracking-widest rounded-xl transition-all cursor-pointer ${
+                    scanMode === "upload"
+                      ? "bg-emerald-500 text-[#0f1115] shadow-lg shadow-emerald-500/10"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  🖼️ Încarcă Imagine
+                </button>
+              </div>
 
-                <div className="relative">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleImageUpload} 
-                    className="hidden" 
-                    id="image-file-upload" 
-                  />
-                  <label 
-                    htmlFor="image-file-upload"
-                    className="w-full btn-elegant-outline py-4 text-xs font-black uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2 active:scale-98 transition-all border border-white/10"
-                  >
-                    <Upload size={16} className="text-emerald-400" /> Încarcă o Imagine
-                  </label>
+              {/* Dynamic Scan Mode Screen Content */}
+              {scanMode === "camera" ? (
+                <div className="space-y-4">
+                  <div className="card-elegant bg-gradient-to-b from-[#1c1f26]/60 to-[#0f1115] p-6 text-center border border-white/5 space-y-6 rounded-[28px]">
+                    <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
+                      <div className="absolute inset-0 border border-emerald-500/20 rounded-full animate-ping [animation-duration:3s]" />
+                      <div className="absolute inset-4 border border-emerald-500/35 rounded-full animate-pulse [animation-duration:2s]" />
+                      <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.12)]">
+                        <Scan size={32} className="text-emerald-400 stroke-[2] animate-pulse" />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-white leading-none">Scaner Cod de Bare</h4>
+                      <p className="text-[11px] text-slate-400 leading-normal max-w-[260px] mx-auto">
+                        Apropiați produsul de cameră. Codul va fi recunoscut automat și verificat pe Open Food Facts.
+                      </p>
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        haptics.playClick();
+                        setShowScanner(true);
+                      }}
+                      className="w-full btn-elegant py-4 text-xs font-black uppercase tracking-widest active:scale-98 shadow-md shadow-emerald-500/10 cursor-pointer"
+                    >
+                      Pornește Scanarea Live
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageUpload} 
+                      className="hidden" 
+                      id="image-file-upload" 
+                    />
+                    <label 
+                      htmlFor="image-file-upload"
+                      className="group block card-elegant bg-gradient-to-b from-[#1c1f26]/60 to-[#0f1115] text-center border border-dashed border-white/10 hover:border-emerald-500/30 hover:bg-[#1a1d24]/60 p-7 rounded-[28px] cursor-pointer transition-all active:scale-[0.99] space-y-5"
+                    >
+                      <div className="w-16 h-16 bg-emerald-500/5 rounded-full flex items-center justify-center border border-emerald-500/15 group-hover:scale-105 transition-all mx-auto shadow-sm">
+                        <Upload size={24} className="text-emerald-400 group-hover:translate-y-[-2px] transition-transform" />
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-white">Analizator Foto</h4>
+                        <p className="text-[11px] text-slate-400 leading-normal max-w-[240px] mx-auto">
+                          Selectați o imagine clară a ambalajului sau a tabelului nutrițional pentru detectare cu Gemini AI.
+                        </p>
+                      </div>
+
+                      <div className="inline-block py-2 px-5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 text-[9px] font-black uppercase tracking-widest transition-all group-hover:bg-emerald-500/20">
+                        Caută din Galerie
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
                    <div className="card-elegant bg-[#1c1f26] p-4 text-center">
                       <div className="text-xl mb-1 text-emerald-400">🥗</div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nutriție</p>
