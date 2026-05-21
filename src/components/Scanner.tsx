@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { X, Camera, RefreshCw, AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
 import { haptics } from "../lib/haptics";
@@ -39,18 +39,31 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
         }
       }
 
-      // Create pristine fresh reference targeting #barcode-reader
-      const scanner = new Html5Qrcode("barcode-reader");
+      // Create pristine fresh reference targeting #barcode-reader with configured formats
+      const scanner = new Html5Qrcode("barcode-reader", {
+        verbose: false,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        useBarCodeDetectorIfSupported: true
+      });
       html5QrCodeRef.current = scanner;
 
       await scanner.start(
         cameraIdOrConstraint,
         {
-          fps: 15,
-          // Fluid aspect-ratio scanning grid
+          fps: 20, // Faster scan rate for barcodes
+          // Fluid rectangular aspect-ratio scanning grid ideal for 1D barcodes
           qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.75;
-            return { width: size, height: size };
+            const qrWidth = Math.min(width * 0.85, 340);
+            const qrHeight = Math.min(height * 0.45, 170);
+            return { width: qrWidth, height: qrHeight };
           }
         },
         (decodedText) => {
@@ -206,7 +219,7 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
 
       <div className="flex-1 overflow-auto p-6 flex flex-col gap-6 max-w-md mx-auto w-full justify-center">
         {/* Dynamic camera preview container box */}
-        <div className="relative aspect-square card-elegant bg-[#12141c]/80 overflow-hidden flex items-center justify-center p-0 border border-white/10 shadow-2xl rounded-[32px]">
+        <div className="relative aspect-[4/3] card-elegant bg-[#12141c]/80 overflow-hidden flex items-center justify-center p-0 border border-white/10 shadow-2xl rounded-[32px]">
           
           <div id="barcode-reader" className="w-full h-full relative z-0"></div>
 
@@ -237,27 +250,27 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
             </div>
           )}
 
-          {/* Laser scanning high-tech visual overlay (only active when camera is live) */}
-          {cameraStatus === "active" && (
-            <>
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981] animate-[scan_2.5s_infinite_ease-in-out] pointer-events-none z-10" />
-              
-              <style>{`
-                @keyframes scan {
-                  0% { top: 4%; }
-                  50% { top: 94%; }
-                  100% { top: 4%; }
-                }
-              `}</style>
-            </>
-          )}
-
-          {/* Futuristic high-contrast transparent tracking corners */}
-          <div className="absolute inset-5 border-2 border-transparent pointer-events-none rounded-2xl z-20">
+          {/* Futuristic high-contrast transparent tracking corners representing rectangular EAN barcode region */}
+          <div className="absolute left-[7.5%] right-[7.5%] top-[27.5%] bottom-[27.5%] border border-emerald-500/10 rounded-2xl z-20 pointer-events-none bg-emerald-500/[0.02] shadow-[0_0_15px_rgba(16,185,129,0.03)]">
             <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
             <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
             <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
             <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
+            
+            {/* Laser scanning high-tech visual overlay (only active when camera is live) */}
+            {cameraStatus === "active" && (
+              <>
+                <div className="absolute left-1 right-1 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981] animate-[scan_2.0s_infinite_ease-in-out] pointer-events-none z-10" />
+                
+                <style>{`
+                  @keyframes scan {
+                    0% { top: 6%; }
+                    50% { top: 94%; }
+                    100% { top: 6%; }
+                  }
+                `}</style>
+              </>
+            )}
           </div>
         </div>
 
