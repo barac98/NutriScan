@@ -36,4 +36,5 @@ export interface ShoppingItem {
 
 export interface UserPreferences {
   allergens: string[];
+  diets: string[];
 }

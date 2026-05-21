@@ -1,4 +1,4 @@
-import { Product } from "../types";
+import { Product, UserPreferences } from "../types";
 import { 
   CheckCircle, AlertTriangle, XCircle, Info, Leaf, MapPin, 
   ArrowRight, MessageSquare, Star, Plus, Check, Sparkles
@@ -6,14 +6,16 @@ import {
 import { motion } from "motion/react";
 import { haptics } from "../lib/haptics";
 import { useState } from "react";
+import { checkDietaryConflicts } from "../lib/dietHelper";
 
 interface ProductDetailProps {
   product: Product;
   onClose: () => void;
   onAddToShoppingList: (name: string, barcode?: string) => void;
+  userPreferences?: UserPreferences;
 }
 
-export default function ProductDetail({ product, onClose, onAddToShoppingList }: ProductDetailProps) {
+export default function ProductDetail({ product, onClose, onAddToShoppingList, userPreferences }: ProductDetailProps) {
   const [userRating, setUserRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState<string>("");
   const [isAdded, setIsAdded] = useState<boolean>(false);
@@ -22,6 +24,8 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList }:
   const allergens = product?.allergens || [];
   const alternatives = product?.alternatives || [];
   const nutrition = product?.nutrition || {};
+
+  const conflicts = userPreferences ? checkDietaryConflicts(product, userPreferences) : [];
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -113,6 +117,30 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList }:
           </div>
           {getScoreIcon(product.healthScore)}
         </div>
+
+        {/* Diet & Allergen Conflicts Alert */}
+        {conflicts.length > 0 && (
+          <div className="card-elegant bg-rose-500/10 border-rose-500/30 p-5 space-y-3 shadow-[0_0_20px_rgba(239,68,68,0.15)] animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="text-rose-400 w-5 h-5 animate-bounce" />
+              <h4 className="text-xs font-black uppercase text-rose-400 tracking-wider">Atenție! Conflict Profil</h4>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+              Acest aliment conține ingrediente incompatibile cu preferințele sau alergiile tale active:
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {conflicts.map((conflict, i) => (
+                <span 
+                  key={i} 
+                  className="px-2.5 py-1.5 bg-rose-500/25 border border-rose-500/30 rounded-xl text-[10px] font-black uppercase text-rose-200 flex items-center gap-1.5"
+                >
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  {conflict.name} (<span className="text-rose-300 font-bold italic">{conflict.matchedKeyword}</span>)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Assessment Statement card */}
         <div className="card-elegant space-y-3 p-5">
