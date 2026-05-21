@@ -18,10 +18,6 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Safeguard state to verify scanning stability and eliminate camera noise glitches
-  const lastScannedCodeRef = useRef<string | null>(null);
-  const consecutiveCountRef = useRef<number>(0);
-
   const startScanning = async (deviceId: string | null) => {
     try {
       setCameraStatus("loading");
@@ -53,22 +49,10 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
             const code = result.getText();
             // Standard food barcodes contain only numeric digits (0-9) and are of length 6 to 14
             if (code && /^\d+$/.test(code) && code.length >= 6 && code.length <= 14) {
-              if (lastScannedCodeRef.current === code) {
-                consecutiveCountRef.current += 1;
-              } else {
-                lastScannedCodeRef.current = code;
-                consecutiveCountRef.current = 1;
-              }
-
-              // Require 2 consecutive frames reading the identical barcode to trigger (prevents any temporary frame misreading)
-              if (consecutiveCountRef.current >= 2) {
-                haptics.vibrate([15, 30]);
-                haptics.playScanSuccess();
-                onScan(code);
-                // Clear state
-                lastScannedCodeRef.current = null;
-                consecutiveCountRef.current = 0;
-              }
+              // Trigger scan immediately on first successful detection for responsive, fast reading
+              haptics.vibrate([15, 30]);
+              haptics.playScanSuccess();
+              onScan(code);
             }
           }
           // Silent framing feedback (ignore standard frame decoding failures)
@@ -97,20 +81,38 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
           }));
           setCameras(videoDevices);
           
-          // Hunt precisely for standard environmental back camera label keys
-          const backCamIdx = videoDevices.findIndex(d => {
+          // Rate each camera systematically to select the best rear wide/main (1x) lens
+          const ratedCameras = videoDevices.map((d, index) => {
             const label = d.label.toLowerCase();
-            return label.includes("back") || 
-                   label.includes("rear") || 
-                   label.includes("environment") ||
-                   label.includes("spate") || 
-                   label.includes("secundar") || 
-                   label.includes("principala") ||
-                   label.includes("0,5x") ||
-                   label.includes("1x");
+            let score = 0;
+            
+            // Strong preference for rear-facing cameras
+            if (label.includes("back") || label.includes("rear") || label.includes("spate") || label.includes("environment") || label.includes("secundar")) {
+              score += 15;
+            }
+            
+            // Moderate preference for "1x", "main", or "primary" labels (indicates the focal lens)
+            if (label.includes("1x") || label.includes("main") || label.includes("primary") || label.includes("principala") || label.includes("standard")) {
+              score += 10;
+            }
+            
+            // Strong penalty for front/selfie cameras
+            if (label.includes("front") || label.includes("selfie") || label.includes("fata") || label.includes("facetime")) {
+              score -= 30;
+            }
+            
+            // Strong penalty for ultra-wide, zoom, or macro lenses which cannot focus close
+            if (label.includes("ultra") || label.includes("0.5x") || label.includes("0,5x") || label.includes("0.6x") || label.includes("0,6x") || label.includes("tele") || label.includes("macro") || label.includes("zoom")) {
+              score -= 20;
+            }
+            
+            return { index, score };
           });
+
+          // Sort descending by rating score and pick the index of the highest rated device
+          ratedCameras.sort((a, b) => b.score - a.score);
+          const targetIndex = ratedCameras[0].index;
           
-          const targetIndex = backCamIdx !== -1 ? backCamIdx : 0;
           setCurrentCameraIndex(targetIndex);
           await startScanning(videoDevices[targetIndex].id);
         } else {

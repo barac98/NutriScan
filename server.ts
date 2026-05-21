@@ -77,7 +77,11 @@ app.post("/api/analyze-product", async (req, res) => {
 
 Notează acest cod de bare real pentru stocare: ${barcode || 'N/A'}.
 
-CRITICAL: Pentru proprietățile din JSON-ul de răspuns, folosește EXACT numele de produs "${pName}" și brandul "${pBrand}" obținute din datele Open Food Facts de mai sus. NU schimba, edita sau ignora aceste informații în rezultatul final sub nicio formă! Te rog folosește aceste date ultra-sigure de analiză ca bază de pornire certă. Notează că scorul de sănătate (healthScore), evaluarea nutrițională românească (healthAssessment) și alternativele optime (reale, vândute în mod obișnuit în Europa) trebuie calculate de tine profesionist și obiectiv pe baza datelor nutriționale de mai sus.`;
+CRITICAL INSTRUCȚIUNI EXTRAGERE:
+1. Dacă numele produsului oferit în datele Open Food Facts ("${pName}") este foarte general, simplist sau incomplet (cum ar fi doar "miez semințe"), iar tu identifici din baza ta de date bazat pe codul de bare (${barcode || 'N/A'}) exact tipul alimentar al produsului, extinde numele în proprietatea "name" din JSON-ul de răspuns pentru a fi clar, complet și ușor de recunoscut în limba română (ex: "Miez semințe de floarea-soarelui").
+2. Dacă brandul este raportat ca "Necunoscut" sau este gol, dar identifici producătorul sau marca reală românească asociată cu codul de bare (ex: SanoVita, Pirifan, Orlando's, etc.), folosește brandul corect în proprietatea "brand". Altfel, lasă "Necunoscut" sau folosește brandul sugerat.
+3. Dacă unele proprietăți precum ingredientele sau valorile nutriționale sunt marcate ca lipsă sau nedisponibile în datele OFF transmise mai sus, te rog completează-le inteligent în proprietățile din JSON cu valorile nutriționale medii reale ale acelui tip de aliment (de exemplu: semințele de floarea-soarelui decoltate au în medie la 100g aproximativ ~580 Kcal, ~50g Grăsimi, ~20g Carbohidrați, ~21g Proteine și sub 0.1g Sare) în loc de a returna gol sau "-". Rămâi ultra-precis și util!
+4. Calculează scorul de sănătate (healthScore) de la 0 la 100 (semințele simple fiind neprocesate au scor ridicat), scrie evaluarea nutrițională (healthAssessment) ultra-scurtă în limba română și sugerează 2 alternative specifice, sănătoase și comune pe piața românească.`;
     } else {
       if (barcode) {
         prompt += `\nCod de bare: ${barcode}`;
