@@ -30,6 +30,15 @@ export default function App() {
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanMode, setScanMode] = useState<"camera" | "upload">("camera");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    const id = setTimeout(() => {
+      setToastMessage((prev) => (prev === message ? null : prev));
+    }, 5000);
+    return id;
+  };
 
   const handleTabChange = (tab: "scan" | "history" | "list" | "settings") => {
     haptics.playSelect();
@@ -110,8 +119,8 @@ export default function App() {
           scannedAt: new Date().toISOString()
         });
       }
-    } catch (err) {
-      alert("A apărut o eroare la analiza produsului. Te rugăm să încerci din nou.");
+    } catch (err: any) {
+      showToast(err.message || "A apărut o eroare la analiza produsului. Te rugăm să încerci din nou.");
       console.error(err);
     } finally {
       setAnalyzing(false);
@@ -129,9 +138,9 @@ export default function App() {
         setImageWarning(null);
       }
       await analyzeProduct({ image: enhanced.base64 });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error processing file:", err);
-      alert("Nu s-a putut procesa imaginea. Te rugăm să încerci din nou.");
+      showToast(err.message || "Nu s-a putut procesa imaginea. Te rugăm să încerci din nou.");
       setAnalyzing(false);
     }
   };
@@ -144,7 +153,7 @@ export default function App() {
 
   const addToShoppingList = async (name: string, barcode?: string) => {
     if (!user) {
-      alert("Te rugăm să te autentifici pentru a folosi lista de cumpărături.");
+      showToast("Te rugăm să te autentifici pentru a folosi lista de cumpărături.");
       return;
     }
     await addDoc(collection(db, "shoppingLists"), {
@@ -562,6 +571,21 @@ export default function App() {
         <NavButton active={activeTab === "list"} onClick={() => handleTabChange("list")} icon={<ShoppingCart size={20} />} label="Listă" />
         <NavButton active={activeTab === "settings"} onClick={() => handleTabChange("settings")} icon={<SettingsIcon size={20} />} label="Profil" />
       </nav>
+
+      {/* Visual elegant toast message alert box */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-xs bg-slate-900/95 backdrop-blur-md border border-white/10 text-white py-3.5 px-4 rounded-2xl shadow-2xl flex items-center gap-3"
+          >
+            <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse flex-shrink-0" />
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-200 flex-1 leading-snug">{toastMessage}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

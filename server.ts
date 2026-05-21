@@ -47,6 +47,11 @@ app.post("/api/analyze-product", async (req, res) => {
       } catch (err) {
         console.error("Open Food Facts fetch error:", err);
       }
+
+      // If barcode was scanned, but we found no info on Open Food Facts, and there is no backup image or text, return a descriptive Romanian error
+      if (!openFoodFactsData && !image && !ingredientsText) {
+        return res.status(404).json({ error: "Produsul nu a fost găsit în baza de date. Te rugăm să încerci scanarea ingredientelor prin fotografie." });
+      }
     }
 
     let prompt = "Analizează acest produs alimentar.";

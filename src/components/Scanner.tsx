@@ -51,19 +51,33 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
           Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.QR_CODE
         ],
-        useBarCodeDetectorIfSupported: true
+        useBarCodeDetectorIfSupported: false // Force robust pure ZXing JS/WASM engine, bypassing buggy experimental browser APIs
       });
       html5QrCodeRef.current = scanner;
 
+      // Construct high-definition stream constraints with continuous auto-focus to ensure ultra-sharp barcode detection
+      const constraints: MediaTrackConstraints = typeof cameraIdOrConstraint === "string"
+        ? {
+            deviceId: { exact: cameraIdOrConstraint },
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
+            advanced: [{ focusMode: "continuous" }] as any
+          }
+        : {
+            facingMode: { exact: cameraIdOrConstraint.facingMode },
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
+            advanced: [{ focusMode: "continuous" }] as any
+          };
+
       await scanner.start(
-        cameraIdOrConstraint,
+        constraints,
         {
-          fps: 20, // Faster scan rate for barcodes
-          // Fluid rectangular aspect-ratio scanning grid ideal for 1D barcodes
+          fps: 24, // High frequency polling
+          // Generous scan box (80% of min dimension) ensures we never miss quiet zones or clip barcode bounds
           qrbox: (width, height) => {
-            const qrWidth = Math.min(width * 0.85, 340);
-            const qrHeight = Math.min(height * 0.45, 170);
-            return { width: qrWidth, height: qrHeight };
+            const size = Math.min(width, height) * 0.8;
+            return { width: size, height: size };
           }
         },
         (decodedText) => {
@@ -250,8 +264,8 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
             </div>
           )}
 
-          {/* Futuristic high-contrast transparent tracking corners representing rectangular EAN barcode region */}
-          <div className="absolute left-[7.5%] right-[7.5%] top-[27.5%] bottom-[27.5%] border border-emerald-500/10 rounded-2xl z-20 pointer-events-none bg-emerald-500/[0.02] shadow-[0_0_15px_rgba(16,185,129,0.03)]">
+          {/* Futuristic high-contrast transparent tracking corners representing square EAN barcode region */}
+          <div className="absolute left-[20%] right-[20%] top-[10%] bottom-[10%] border border-emerald-500/10 rounded-2xl z-20 pointer-events-none bg-emerald-500/[0.02] shadow-[0_0_15px_rgba(16,185,129,0.03)]">
             <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
             <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
             <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
