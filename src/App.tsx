@@ -303,6 +303,38 @@ export default function App() {
                     >
                       Pornește Scanarea Live
                     </button>
+
+                    <div className="relative pt-4 border-t border-white/5 flex flex-col items-center gap-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Sau introdu codul manual</p>
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const form = e.currentTarget;
+                          const input = form.elements.namedItem("manualBarcode") as HTMLInputElement;
+                          if (input && input.value.trim()) {
+                            haptics.playClick();
+                            analyzeProduct({ barcode: input.value.trim() });
+                            input.value = '';
+                          }
+                        }}
+                        className="flex w-full gap-2 mt-1"
+                      >
+                        <input 
+                          type="text"
+                          name="manualBarcode"
+                          placeholder="Ex: 5941886123456"
+                          pattern="\d+"
+                          required
+                          className="input-elegant flex-1 py-2 px-3 text-xs h-9 border border-white/10"
+                        />
+                        <button 
+                          type="submit"
+                          className="px-4 h-9 bg-white/5 border border-white/10 text-slate-200 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all outline-none cursor-pointer"
+                        >
+                          Caută
+                        </button>
+                      </form>
+                    </div>
                   </div>
                 </div>
               ) : (

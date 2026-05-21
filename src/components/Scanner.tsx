@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserMultiFormatReader } from "@zxing/library";
+import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { X, Camera, RefreshCw, AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
 import { haptics } from "../lib/haptics";
@@ -18,6 +18,10 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Safeguard state to verify scanning stability and eliminate camera noise glitches
+  const lastScannedCodeRef = useRef<string | null>(null);
+  const consecutiveCountRef = useRef<number>(0);
+
   const startScanning = async (deviceId: string | null) => {
     try {
       setCameraStatus("loading");
@@ -27,7 +31,17 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
         codeReaderRef.current.reset();
       }
 
-      const reader = new BrowserMultiFormatReader();
+      // Configure precise hints mapping to only decode retail barcodes (EAN-13, EAN-8, UPC-A, UPC-E)
+      const hints = new Map();
+      const formats = [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E
+      ];
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, formats);
+
+      const reader = new BrowserMultiFormatReader(hints);
       codeReaderRef.current = reader;
 
       // Start continuous stream decoding on our native video element
@@ -37,10 +51,24 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
         (result, err) => {
           if (result) {
             const code = result.getText();
-            if (code) {
-              haptics.vibrate([15, 30]);
-              haptics.playScanSuccess();
-              onScan(code);
+            // Standard food barcodes contain only numeric digits (0-9) and are of length 6 to 14
+            if (code && /^\d+$/.test(code) && code.length >= 6 && code.length <= 14) {
+              if (lastScannedCodeRef.current === code) {
+                consecutiveCountRef.current += 1;
+              } else {
+                lastScannedCodeRef.current = code;
+                consecutiveCountRef.current = 1;
+              }
+
+              // Require 2 consecutive frames reading the identical barcode to trigger (prevents any temporary frame misreading)
+              if (consecutiveCountRef.current >= 2) {
+                haptics.vibrate([15, 30]);
+                haptics.playScanSuccess();
+                onScan(code);
+                // Clear state
+                lastScannedCodeRef.current = null;
+                consecutiveCountRef.current = 0;
+              }
             }
           }
           // Silent framing feedback (ignore standard frame decoding failures)

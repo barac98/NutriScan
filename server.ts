@@ -57,10 +57,13 @@ app.post("/api/analyze-product", async (req, res) => {
     let prompt = "Analizează acest produs alimentar.";
     
     if (openFoodFactsData) {
+      const pName = openFoodFactsData.product_name_ro || openFoodFactsData.product_name || 'Necunoscut / Identificat greșit';
+      const pBrand = openFoodFactsData.brands || 'Necunoscut';
+
       // Ground Gemini's expert analysis with verified Open Food Facts data
       prompt += `\nAm găsit date oficiale în baza de date Open Food Facts:
-- Nume Produs: ${openFoodFactsData.product_name_ro || openFoodFactsData.product_name || 'Necunoscut / Identificat greșit'}
-- Brand/Marcă: ${openFoodFactsData.brands || 'Necunoscut'}
+- Nume Produs: ${pName}
+- Brand/Marcă: ${pBrand}
 - Ingrediente înregistrate: ${openFoodFactsData.ingredients_text_ro || openFoodFactsData.ingredients_text || 'Informații ingrediente nedisponibile direct'}
 - Nutriție per 100g/ml:
   * Energie Kcal: ${openFoodFactsData.nutriments?.['energy-kcal_100g'] ?? openFoodFactsData.nutriments?.['energy-kcal'] ?? openFoodFactsData.nutriments?.['energy_100g'] ?? '-'}
@@ -73,7 +76,8 @@ app.post("/api/analyze-product", async (req, res) => {
 - Ambalaj/Sustenabilitate: ${openFoodFactsData.packaging || openFoodFactsData.packaging_text || 'Ambalaj nereclamat ca reciclabil'}
 
 Notează acest cod de bare real pentru stocare: ${barcode || 'N/A'}.
-Te rog folosește aceste date ultra-sigure de analiză ca bază de pornire certă. Notează că scorul de sănătate (healthScore), evaluarea nutrițională românească (healthAssessment) și alternativele optime (reale, vândute în mod obișnuit în Europa) trebuie calculate de tine profesionist și obiectiv pe baza datelor nutriționale de mai sus.`;
+
+CRITICAL: Pentru proprietățile din JSON-ul de răspuns, folosește EXACT numele de produs "${pName}" și brandul "${pBrand}" obținute din datele Open Food Facts de mai sus. NU schimba, edita sau ignora aceste informații în rezultatul final sub nicio formă! Te rog folosește aceste date ultra-sigure de analiză ca bază de pornire certă. Notează că scorul de sănătate (healthScore), evaluarea nutrițională românească (healthAssessment) și alternativele optime (reale, vândute în mod obișnuit în Europa) trebuie calculate de tine profesionist și obiectiv pe baza datelor nutriționale de mai sus.`;
     } else {
       if (barcode) {
         prompt += `\nCod de bare: ${barcode}`;
