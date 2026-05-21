@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
-  signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut 
+  signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut,
+  signInWithRedirect, getRedirectResult
 } from "firebase/auth";
 import { 
   collection, addDoc, query, where, orderBy, onSnapshot, 
@@ -46,10 +47,35 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Detect if running inside a downloaded standalone PWA (Home Screen on iOS/Android)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    if (isStandalone) {
+      setLoading(true);
+      getRedirectResult(auth)
+        .then((result) => {
+          if (result?.user) {
+            setUser(result.user);
+            showToast("Autentificare reușită cu Google.");
+          }
+        })
+        .catch((error) => {
+          console.error("Redirect auth error:", error);
+          showToast("Eroare la autentificarea prin redirect Google.");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      setLoading(false);
+      // If standalone redirect holds the screen, keep loading true until finalized
+      if (!isStandalone) {
+        setLoading(false);
+      }
     });
+
     return unsub;
   }, []);
 
@@ -87,7 +113,22 @@ export default function App() {
 
   const login = () => {
     haptics.playClick();
-    signInWithPopup(auth, new GoogleAuthProvider());
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    // Detect if running inside a downloaded standalone PWA (Home Screen on iOS/Android)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    if (isStandalone) {
+      setLoading(true);
+      signInWithRedirect(auth, provider);
+    } else {
+      signInWithPopup(auth, provider).catch((err) => {
+        console.error("Popup signing error or blocked - fallback to redirect:", err);
+        setLoading(true);
+        signInWithRedirect(auth, provider);
+      });
+    }
   };
   const logout = () => {
     haptics.playClick();

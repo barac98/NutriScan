@@ -57,8 +57,16 @@ app.post("/api/analyze-product", async (req, res) => {
     let prompt = "Analizează acest produs alimentar.";
     
     if (openFoodFactsData) {
-      const pName = openFoodFactsData.product_name_ro || openFoodFactsData.product_name || 'Necunoscut / Identificat greșit';
+      let pName = openFoodFactsData.product_name_ro || openFoodFactsData.product_name || 'Necunoscut / Identificat greșit';
       const pBrand = openFoodFactsData.brands || 'Necunoscut';
+
+      // Normalize extremely vague or generic Names found in various Romanian Open Food Facts listings
+      const lowerName = pName.toLowerCase().trim();
+      if (lowerName === "miez semințe" || lowerName === "miez seminte" || lowerName === "miez de seminte" || lowerName === "miez de semințe") {
+        pName = "Miez de semințe de floarea-soarelui";
+      } else if (lowerName === "semințe floarea soarelui" || lowerName === "seminte floarea soarelui") {
+        pName = "Semințe de floarea-soarelui decoltate";
+      }
 
       // Ground Gemini's expert analysis with verified Open Food Facts data
       prompt += `\nAm găsit date oficiale în baza de date Open Food Facts:
@@ -78,10 +86,10 @@ app.post("/api/analyze-product", async (req, res) => {
 Notează acest cod de bare real pentru stocare: ${barcode || 'N/A'}.
 
 CRITICAL INSTRUCȚIUNI EXTRAGERE:
-1. Dacă numele produsului oferit în datele Open Food Facts ("${pName}") este foarte general, simplist sau incomplet (cum ar fi doar "miez semințe"), iar tu identifici din baza ta de date bazat pe codul de bare (${barcode || 'N/A'}) exact tipul alimentar al produsului, extinde numele în proprietatea "name" din JSON-ul de răspuns pentru a fi clar, complet și ușor de recunoscut în limba română (ex: "Miez semințe de floarea-soarelui").
-2. Dacă brandul este raportat ca "Necunoscut" sau este gol, dar identifici producătorul sau marca reală românească asociată cu codul de bare (ex: SanoVita, Pirifan, Orlando's, etc.), folosește brandul corect în proprietatea "brand". Altfel, lasă "Necunoscut" sau folosește brandul sugerat.
-3. Dacă unele proprietăți precum ingredientele sau valorile nutriționale sunt marcate ca lipsă sau nedisponibile în datele OFF transmise mai sus, te rog completează-le inteligent în proprietățile din JSON cu valorile nutriționale medii reale ale acelui tip de aliment (de exemplu: semințele de floarea-soarelui decoltate au în medie la 100g aproximativ ~580 Kcal, ~50g Grăsimi, ~20g Carbohidrați, ~21g Proteine și sub 0.1g Sare) în loc de a returna gol sau "-". Rămâi ultra-precis și util!
-4. Calculează scorul de sănătate (healthScore) de la 0 la 100 (semințele simple fiind neprocesate au scor ridicat), scrie evaluarea nutrițională (healthAssessment) ultra-scurtă în limba română și sugerează 2 alternative specifice, sănătoase și comune pe piața românească.`;
+1. PĂSTREAZĂ ȘI EXTINDE CATEGORIA CORECTĂ: Folosește numele normalizat de bază „${pName}”. Dacă numele oferit în Open Food Facts de mai sus este „Miez de semințe de floarea-soarelui”, NU genera sub nicio formă un alt produs alimentar (cum ar fi sâmburi de caise, dovleac, nucă, caju, alune, biscuiți sau dulciuri). Produsul este 100% miez de semințe de floarea-soarelui decoltate.
+2. NU inventa un brand complet gratuit bazat doar pe aproximarea codului de bare dacă acesta este raportat ca „Necunoscut”. Dacă poți deduce cu siguranță din codul de bare (${barcode || 'N/A'}) că aparține unui brand românesc recunoscut (ex: SanoVita, Pirifan, Orlando's, Alint, etc.), scrie brandul respectiv cu primă literă mare în proprietatea „brand”. În caz contrar, păstrează „Necunoscut” sau folosește brandul indicat ca bază de pornire.
+3. Completează cu acuratețe ridicată toate valorile nutriționale lipsă folosind date nutriționale medii de încredere pentru acel tip specific de aliment (ex: semințele de floarea-soarelui simple au aprox. ~580 Kcal, ~50g grăsimi, ~20g carbohidrați, ~21g proteine, <0.1g sare per 100g). NU returna goluri sau „-” în câmpurile nutriționale din JSON!
+4. Calculează scorul de sănătate (healthScore) realist (de exemplu, semințele simple, neprăjite și nesărate sunt foarte sănătoase, având un scor cuprins între 85 și 95 deoarece sunt surse excelente de grăsimi sănătoase și proteine vegetale, în ciuda densității calorice). Evaluarea nutrițională (healthAssessment) trebuie să fie o singură propoziție scurtă, utilă și în română.`;
     } else {
       if (barcode) {
         prompt += `\nCod de bare: ${barcode}`;
