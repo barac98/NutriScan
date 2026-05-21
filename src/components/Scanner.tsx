@@ -55,41 +55,70 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
       });
       html5QrCodeRef.current = scanner;
 
-      // Construct high-definition stream constraints with continuous auto-focus to ensure ultra-sharp barcode detection
-      const constraints: MediaTrackConstraints = typeof cameraIdOrConstraint === "string"
+      // Define cameraIdOrConfig as expected by html5-qrcode (either a camera ID string or a 1-key object)
+      const startArg = typeof cameraIdOrConstraint === "string"
+        ? cameraIdOrConstraint
+        : { facingMode: "environment" };
+
+      // High-definition stream constraints with continuous auto-focus configured through the scanning config to keep API pristine
+      const videoConstraints: MediaTrackConstraints = typeof cameraIdOrConstraint === "string"
         ? {
             deviceId: { exact: cameraIdOrConstraint },
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
             advanced: [{ focusMode: "continuous" }] as any
           }
         : {
-            facingMode: { exact: cameraIdOrConstraint.facingMode },
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
             advanced: [{ focusMode: "continuous" }] as any
           };
 
-      await scanner.start(
-        constraints,
-        {
-          fps: 24, // High frequency polling
-          // Generous scan box (80% of min dimension) ensures we never miss quiet zones or clip barcode bounds
-          qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.8;
-            return { width: size, height: size };
+      try {
+        await scanner.start(
+          startArg,
+          {
+            fps: 24, // High frequency polling
+            videoConstraints,
+            // Fluid rectangular aspect-ratio scanning grid ideal for wider 1D barcodes
+            qrbox: (width, height) => {
+              const qrWidth = Math.min(width * 0.85, 340);
+              const qrHeight = Math.min(height * 0.45, 170);
+              return { width: qrWidth, height: qrHeight };
+            }
+          },
+          (decodedText) => {
+            // Throttled success feedback
+            haptics.vibrate([15, 30]);
+            haptics.playScanSuccess();
+            onScan(decodedText);
+          },
+          () => {
+            // Silent framing feedback
           }
-        },
-        (decodedText) => {
-          // Throttled success feedback
-          haptics.vibrate([15, 30]);
-          haptics.playScanSuccess();
-          onScan(decodedText);
-        },
-        () => {
-          // Silent framing feedback
-        }
-      );
+        );
+      } catch (innerErr) {
+        console.warn("Retrying with relaxed native constraints due to overconstrained error...", innerErr);
+        // Fallback to absolute simplest config if strict/ideal constraints are rejected by the browser/device
+        await scanner.start(
+          startArg,
+          {
+            fps: 20,
+            qrbox: (width, height) => {
+              const qrWidth = Math.min(width * 0.85, 340);
+              const qrHeight = Math.min(height * 0.45, 170);
+              return { width: qrWidth, height: qrHeight };
+            }
+          },
+          (decodedText) => {
+            haptics.vibrate([15, 30]);
+            haptics.playScanSuccess();
+            onScan(decodedText);
+          },
+          () => {}
+        );
+      }
 
       isScanningRef.current = true;
       setCameraStatus("active");
@@ -264,8 +293,8 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
             </div>
           )}
 
-          {/* Futuristic high-contrast transparent tracking corners representing square EAN barcode region */}
-          <div className="absolute left-[20%] right-[20%] top-[10%] bottom-[10%] border border-emerald-500/10 rounded-2xl z-20 pointer-events-none bg-emerald-500/[0.02] shadow-[0_0_15px_rgba(16,185,129,0.03)]">
+          {/* Futuristic high-contrast transparent tracking corners representing rectangular EAN barcode region */}
+          <div className="absolute left-[7.5%] right-[7.5%] top-[27.5%] bottom-[27.5%] border border-emerald-500/10 rounded-2xl z-20 pointer-events-none bg-emerald-500/[0.02] shadow-[0_0_15px_rgba(16,185,129,0.03)]">
             <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
             <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
             <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
