@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { BrowserMultiFormatReader } from "@zxing/library";
 import { X, Camera, RefreshCw, AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
 import { haptics } from "../lib/haptics";
 
 interface ScannerProps {
   onScan: (barcode: string) => void;
-  onImageCapture: (file: File) => void;
+  onImageCapture?: (file: File) => void;
   onClose: () => void;
 }
 
@@ -15,115 +15,41 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
   const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([]);
   const [currentCameraIndex, setCurrentCameraIndex] = useState<number>(0);
   
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-  const isScanningRef = useRef<boolean>(false);
+  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const startScanning = async (cameraIdOrConstraint: string | { facingMode: string }) => {
+  const startScanning = async (deviceId: string | null) => {
     try {
       setCameraStatus("loading");
       
-      // Assure absolute cleanup of previous instances before drawing
-      if (html5QrCodeRef.current) {
-        if (isScanningRef.current) {
-          try {
-            await html5QrCodeRef.current.stop();
-          } catch (e) {
-            // Ignored
-          }
-          isScanningRef.current = false;
-        }
-        try {
-          html5QrCodeRef.current.clear();
-        } catch (e) {
-          // Ignored
-        }
+      // Clean up previous reader instances and any active camera tracks perfectly
+      if (codeReaderRef.current) {
+        codeReaderRef.current.reset();
       }
 
-      // Create pristine fresh reference targeting #barcode-reader with configured formats
-      const scanner = new Html5Qrcode("barcode-reader", {
-        verbose: false,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.QR_CODE
-        ],
-        useBarCodeDetectorIfSupported: false // Force robust pure ZXing JS/WASM engine, bypassing buggy experimental browser APIs
-      });
-      html5QrCodeRef.current = scanner;
+      const reader = new BrowserMultiFormatReader();
+      codeReaderRef.current = reader;
 
-      // Define cameraIdOrConfig as expected by html5-qrcode (either a camera ID string or a 1-key object)
-      const startArg = typeof cameraIdOrConstraint === "string"
-        ? cameraIdOrConstraint
-        : { facingMode: "environment" };
-
-      // High-definition stream constraints with continuous auto-focus configured through the scanning config to keep API pristine
-      const videoConstraints: MediaTrackConstraints = typeof cameraIdOrConstraint === "string"
-        ? {
-            deviceId: { exact: cameraIdOrConstraint },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            advanced: [{ focusMode: "continuous" }] as any
-          }
-        : {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            advanced: [{ focusMode: "continuous" }] as any
-          };
-
-      try {
-        await scanner.start(
-          startArg,
-          {
-            fps: 24, // High frequency polling
-            videoConstraints,
-            // Fluid rectangular aspect-ratio scanning grid ideal for wider 1D barcodes
-            qrbox: (width, height) => {
-              const qrWidth = Math.min(width * 0.85, 340);
-              const qrHeight = Math.min(height * 0.45, 170);
-              return { width: qrWidth, height: qrHeight };
+      // Start continuous stream decoding on our native video element
+      await reader.decodeFromVideoDevice(
+        deviceId,
+        videoRef.current,
+        (result, err) => {
+          if (result) {
+            const code = result.getText();
+            if (code) {
+              haptics.vibrate([15, 30]);
+              haptics.playScanSuccess();
+              onScan(code);
             }
-          },
-          (decodedText) => {
-            // Throttled success feedback
-            haptics.vibrate([15, 30]);
-            haptics.playScanSuccess();
-            onScan(decodedText);
-          },
-          () => {
-            // Silent framing feedback
           }
-        );
-      } catch (innerErr) {
-        console.warn("Retrying with relaxed native constraints due to overconstrained error...", innerErr);
-        // Fallback to absolute simplest config if strict/ideal constraints are rejected by the browser/device
-        await scanner.start(
-          startArg,
-          {
-            fps: 20,
-            qrbox: (width, height) => {
-              const qrWidth = Math.min(width * 0.85, 340);
-              const qrHeight = Math.min(height * 0.45, 170);
-              return { width: qrWidth, height: qrHeight };
-            }
-          },
-          (decodedText) => {
-            haptics.vibrate([15, 30]);
-            haptics.playScanSuccess();
-            onScan(decodedText);
-          },
-          () => {}
-        );
-      }
+          // Silent framing feedback (ignore standard frame decoding failures)
+        }
+      );
 
-      isScanningRef.current = true;
       setCameraStatus("active");
     } catch (err) {
-      console.error("Camera startup crashed:", err);
+      console.error("Camera startup crashed or was rejected:", err);
       setCameraStatus("error");
     }
   };
@@ -133,12 +59,18 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
     
     const initAndQueryCameras = async () => {
       try {
-        const devices = await Html5Qrcode.getCameras();
+        const tempReader = new BrowserMultiFormatReader();
+        const devices = await tempReader.listVideoInputDevices();
+        
         if (devices && devices.length > 0) {
-          setCameras(devices);
+          const videoDevices = devices.map(d => ({
+            id: d.deviceId,
+            label: d.label || `Cameră ${d.deviceId.substring(0, 4)}`
+          }));
+          setCameras(videoDevices);
           
           // Hunt precisely for standard environmental back camera label keys
-          const backCamIdx = devices.findIndex(d => {
+          const backCamIdx = videoDevices.findIndex(d => {
             const label = d.label.toLowerCase();
             return label.includes("back") || 
                    label.includes("rear") || 
@@ -152,15 +84,15 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
           
           const targetIndex = backCamIdx !== -1 ? backCamIdx : 0;
           setCurrentCameraIndex(targetIndex);
-          await startScanning(devices[targetIndex].id);
+          await startScanning(videoDevices[targetIndex].id);
         } else {
-          // Default browser fallback constraint directly
-          await startScanning({ facingMode: "environment" });
+          // Default browser fallback constraint directly (null lets the browser choose)
+          await startScanning(null);
         }
       } catch (err) {
         console.warn("Could not query devices lists, using direct fallback...", err);
         // Direct stream request fallback ignoring label queries
-        await startScanning({ facingMode: "environment" });
+        await startScanning(null);
       }
     };
 
@@ -168,12 +100,8 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
 
     // Secure memory leak cleanup on unmount
     return () => {
-      if (html5QrCodeRef.current && isScanningRef.current) {
-        html5QrCodeRef.current.stop()
-          .then(() => {
-            html5QrCodeRef.current?.clear();
-          })
-          .catch((e) => console.log("Stopped camera cleanup on leave.", e));
+      if (codeReaderRef.current) {
+        codeReaderRef.current.reset();
       }
     };
   }, []);
@@ -193,7 +121,7 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
 
   const handleRetryPermission = async () => {
     haptics.playClick();
-    await startScanning({ facingMode: "environment" });
+    await startScanning(null);
   };
 
   return (
@@ -204,45 +132,6 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
       transition={{ type: "spring", damping: 25, stiffness: 220 }}
       className="fixed inset-0 z-50 bg-[#0f1115] flex flex-col pb-safe"
     >
-      <style>{`
-        /* Remove html5-qrcode background borders & wrappers so our layout remains flawless */
-        #barcode-reader {
-          border: none !important;
-          background: transparent !important;
-        }
-        #barcode-reader video {
-          border-radius: 24px;
-          object-fit: cover !important;
-          width: 100% !important;
-          height: 100% !important;
-        }
-        /* Complete elimination of any built-in canvas, tracking boxes, or text links of html5-qrcode */
-        #barcode-reader__canvas {
-          display: none !important;
-        }
-        #barcode-reader__scan_region div,
-        #barcode-reader__scan_region span,
-        #barcode-reader__scan_region svg,
-        #barcode-reader__scan_region a {
-          border: none !important;
-          border-width: 0px !important;
-          outline: none !important;
-          text-decoration: none !important;
-          box-shadow: none !important;
-        }
-        /* Hide all html5-qrcode built-in overlays, helper tags, guidelines, errors, active links (avoid underlined text leaks) */
-        #barcode-reader div:not(#barcode-reader__scan_region):not(:has(video)),
-        #barcode-reader span,
-        #barcode-reader p,
-        #barcode-reader a,
-        #barcode-reader button,
-        #barcode-reader h1,
-        #barcode-reader h2,
-        #barcode-reader h3 {
-          display: none !important;
-        }
-      `}</style>
-
       {/* Header Grid */}
       <div className="flex flex-col items-center bg-[#1c1f26]/80 backdrop-blur-md border-b border-white/5 px-4 pt-2 pb-4">
         <div className="w-12 h-1.5 bg-white/20 rounded-full mb-3" />
@@ -264,7 +153,14 @@ export default function Scanner({ onScan, onClose }: ScannerProps) {
         {/* Dynamic camera preview container box */}
         <div className="relative aspect-[4/3] card-elegant bg-[#12141c]/80 overflow-hidden flex items-center justify-center p-0 border border-white/10 shadow-2xl rounded-[32px]">
           
-          <div id="barcode-reader" className="w-full h-full relative z-0"></div>
+          {/* Pure native HTML5 Video output element */}
+          <video 
+            ref={videoRef}
+            className="w-full h-full object-cover rounded-[24px]"
+            playsInline
+            muted
+            autoPlay
+          />
 
           {/* Camera Scanning Loading Grid Spinner */}
           {cameraStatus === "loading" && (
