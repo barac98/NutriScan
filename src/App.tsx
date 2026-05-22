@@ -13,7 +13,7 @@ import {
   collection, addDoc, query, where, orderBy, onSnapshot, 
   deleteDoc, doc, updateDoc, serverTimestamp, setDoc 
 } from "firebase/firestore";
-import { auth, db } from "./lib/firebase";
+import { auth, db, OperationType, handleFirestoreError } from "./lib/firebase";
 import { Product, HistoryItem, ShoppingItem, UserPreferences } from "./types";
 import Scanner from "./components/Scanner";
 import ProductDetail from "./components/ProductDetail";
@@ -59,10 +59,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Detect if running inside a downloaded standalone PWA (Home Screen on iOS/Android)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    // Check if there is an active pending redirect login attempt
+    const hasPendingRedirect = localStorage.getItem("nutriscan_pending_redirect") === "true";
 
-    if (isStandalone) {
+    if (hasPendingRedirect) {
       setLoading(true);
       getRedirectResult(auth)
         .then((result) => {
@@ -76,14 +76,16 @@ export default function App() {
           showToast("Eroare la autentificarea prin redirect Google.");
         })
         .finally(() => {
+          localStorage.removeItem("nutriscan_pending_redirect");
           setLoading(false);
         });
     }
 
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      // If standalone redirect holds the screen, keep loading true until finalized
-      if (!isStandalone) {
+      // If we are not actively waiting for redirect results from Google, set loading to false.
+      // This guarantees the PWA never hangs on startup loader inside iOS/Android!
+      if (!hasPendingRedirect) {
         setLoading(false);
       }
     });
@@ -106,6 +108,8 @@ export default function App() {
     );
     const unsubHistory = onSnapshot(historyQuery, (snap) => {
       setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() } as HistoryItem)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, "histories");
     });
 
     const listQuery = query(
@@ -115,6 +119,8 @@ export default function App() {
     );
     const unsubList = onSnapshot(listQuery, (snap) => {
       setShoppingList(snap.docs.map(d => ({ id: d.id, ...d.data() } as ShoppingItem)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, "shoppingLists");
     });
 
     const prefRef = doc(db, "userPreferences", user.uid);
@@ -124,6 +130,8 @@ export default function App() {
         setUserPreferences(data);
         localStorage.setItem("nutriscan_preferences", JSON.stringify(data));
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `userPreferences/${user.uid}`);
     });
 
     return () => {
@@ -138,19 +146,21 @@ export default function App() {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
-    // Detect if running inside a downloaded standalone PWA (Home Screen on iOS/Android)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-
-    if (isStandalone) {
-      setLoading(true);
-      signInWithRedirect(auth, provider);
-    } else {
-      signInWithPopup(auth, provider).catch((err) => {
-        console.error("Popup signing error or blocked - fallback to redirect:", err);
+    // Try popup sign-in first (works beautifully on iOS/Android standalones as secure system modal sheets)
+    signInWithPopup(auth, provider)
+      .then((result) => {
+        if (result?.user) {
+          setUser(result.user);
+          showToast("Autentificare reușită cu Google.");
+        }
+      })
+      .catch((err) => {
+        console.error("Popup login failed - falling back to redirect:", err);
+        // Fallback to Redirect in case of security restriction or popup isolation blocking
+        localStorage.setItem("nutriscan_pending_redirect", "true");
         setLoading(true);
         signInWithRedirect(auth, provider);
       });
-    }
   };
   const logout = () => {
     haptics.playClick();
@@ -170,8 +180,7 @@ export default function App() {
         await setDoc(doc(db, "userPreferences", user.uid), newPrefs);
         showToast("Setări sincronizate online.");
       } catch (err) {
-        console.error("Error saving preferences online:", err);
-        showToast("Salvat local.");
+        handleFirestoreError(err, OperationType.WRITE, `userPreferences/${user.uid}`);
       }
     } else {
       showToast("Salvat local offline.");
@@ -185,8 +194,7 @@ export default function App() {
       await deleteDoc(doc(db, "histories", id));
       showToast("Scanare ștearsă.");
     } catch (err) {
-      console.error(err);
-      showToast("Eroare la ștergerea elementului.");
+      handleFirestoreError(err, OperationType.DELETE, `histories/${id}`);
     }
   };
 
@@ -200,8 +208,7 @@ export default function App() {
       await Promise.all(batchPromises);
       showToast("Tot istoricul a fost golit.");
     } catch (err) {
-      console.error(err);
-      showToast("Eroare la golirea istoricului.");
+      handleFirestoreError(err, OperationType.DELETE, `histories`);
     }
   };
 
@@ -221,13 +228,17 @@ export default function App() {
       
       // Save to history if logged in
       if (user) {
-        await addDoc(collection(db, "histories"), {
-          userId: user.uid,
-          barcode: result.barcode || data.barcode || "N/A",
-          productName: result.name,
-          healthScore: result.healthScore,
-          scannedAt: new Date().toISOString()
-        });
+        try {
+          await addDoc(collection(db, "histories"), {
+            userId: user.uid,
+            barcode: result.barcode || data.barcode || "N/A",
+            productName: result.name,
+            healthScore: result.healthScore,
+            scannedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, "histories");
+        }
       }
     } catch (err: any) {
       showToast(err.message || "A apărut o eroare la analiza produsului. Te rugăm să încerci din nou.");
@@ -266,23 +277,35 @@ export default function App() {
       showToast("Te rugăm să te autentifici pentru a folosi lista de cumpărături.");
       return;
     }
-    await addDoc(collection(db, "shoppingLists"), {
-      userId: user.uid,
-      name,
-      barcode: barcode || null,
-      checked: false,
-      createdAt: new Date().toISOString()
-    });
+    try {
+      await addDoc(collection(db, "shoppingLists"), {
+        userId: user.uid,
+        name,
+        barcode: barcode || null,
+        checked: false,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, "shoppingLists");
+    }
   };
 
   const toggleShopItem = async (id: string, checked: boolean) => {
     haptics.playSelect();
-    await updateDoc(doc(db, "shoppingLists", id), { checked: !checked });
+    try {
+      await updateDoc(doc(db, "shoppingLists", id), { checked: !checked });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `shoppingLists/${id}`);
+    }
   };
 
   const deleteShopItem = async (id: string) => {
     haptics.playClick();
-    await deleteDoc(doc(db, "shoppingLists", id));
+    try {
+      await deleteDoc(doc(db, "shoppingLists", id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `shoppingLists/${id}`);
+    }
   };
 
   if (loading) {

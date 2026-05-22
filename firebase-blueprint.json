@@ -16,6 +16,16 @@
       },
       "required": ["email"]
     },
+    "UserPreferences": {
+      "title": "User Preferences",
+      "description": "User dietary preferences and allergen settings",
+      "type": "object",
+      "properties": {
+        "allergens": { "type": "array", "items": { "type": "string" } },
+        "diets": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["allergens", "diets"]
+    },
     "Product": {
       "title": "Product",
       "description": "Information about a product based on barcode or label scan",
@@ -87,6 +97,10 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "Individual user settings"
+    },
+    "/userPreferences/{userId}": {
+      "schema": "UserPreferences",
+      "description": "User dietary preferences and allergen settings"
     },
     "/products/{barcode}": {
       "schema": "Product",

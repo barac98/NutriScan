@@ -30,6 +30,17 @@ service cloud.firestore {
       }
     }
 
+    // --- User Preferences ---
+    match /userPreferences/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserPreferences(request.resource.data);
+      
+      function isValidUserPreferences(data) {
+        return (data.allergens is list || !data.keys().hasAny(['allergens'])) &&
+               (data.diets is list || !data.keys().hasAny(['diets']));
+      }
+    }
+
     // --- Products (Cache) ---
     // Anyone can read products. Only signed in users can create/update (AI will populate via server, but we allow client write for simplicity in this demo, usually it would be restricted or validated)
     match /products/{barcode} {
