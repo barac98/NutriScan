@@ -7,7 +7,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { 
   signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut,
-  signInWithRedirect, getRedirectResult
+  signInWithRedirect, getRedirectResult, signInAnonymously
 } from "firebase/auth";
 import { 
   collection, addDoc, query, where, orderBy, onSnapshot, 
@@ -32,6 +32,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [scanMode, setScanMode] = useState<"camera" | "upload">("camera");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [authHelpModal, setAuthHelpModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    steps: string[];
+  }>({
+    show: false,
+    title: "",
+    message: "",
+    steps: []
+  });
 
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(() => {
     try {
@@ -141,25 +152,104 @@ export default function App() {
     };
   }, [user]);
 
+  const uploadLocalPreferences = async (uid: string) => {
+    try {
+      const prefRef = doc(db, "userPreferences", uid);
+      await setDoc(prefRef, userPreferences);
+      console.log("Local preferences successfully synchronized to cloud for uid:", uid);
+    } catch (err) {
+      console.error("Local preferences synchronization failed:", err);
+    }
+  };
+
+  const guestLogin = () => {
+    haptics.playClick();
+    setLoading(true);
+    signInAnonymously(auth)
+      .then((result) => {
+        if (result?.user) {
+          setUser(result.user);
+          showToast("Autentificat în Mod Oaspete (Cloud-Sync Activ).");
+          uploadLocalPreferences(result.user.uid);
+        }
+      })
+      .catch((err) => {
+        console.error("Guest login failed:", err);
+        showToast("Eroare la activarea Modului Oaspete.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
   const login = () => {
     haptics.playClick();
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
+    setLoading(true);
     // Try popup sign-in first (works beautifully on iOS/Android standalones as secure system modal sheets)
     signInWithPopup(auth, provider)
       .then((result) => {
         if (result?.user) {
           setUser(result.user);
           showToast("Autentificare reușită cu Google.");
+          uploadLocalPreferences(result.user.uid);
         }
       })
-      .catch((err) => {
-        console.error("Popup login failed - falling back to redirect:", err);
-        // Fallback to Redirect in case of security restriction or popup isolation blocking
+      .catch((err: any) => {
+        console.error("Popup login failed:", err);
+        const msg = err?.message || "";
+        const code = err?.code || "";
+
+        // If it's a domain-authorization issue (which is what leads to "requested action is invalid" on popup/redirect),
+        // show a stunning guidance modal.
+        if (code === "auth/invalid-action-code" || msg.includes("requested action is invalid") || msg.includes("unauthorized") || code === "auth/unauthorized-domain") {
+          setLoading(false);
+          setAuthHelpModal({
+            show: true,
+            title: "Domeniu Neautorizat în Firebase",
+            message: "Pentru ca autentificarea Google să funcționeze pe acest domeniu de previzualizare sau standalone, trebuie înregistrat în Firebase Console.",
+            steps: [
+              "Accesează consola ta Firebase.",
+              "Mergi la Build > Authentication > Settings > Authorized Domains.",
+              `Adaugă URL-ul tău curent: "${window.location.hostname}"`,
+              "Salvează setările și reîncearcă din Profil."
+            ]
+          });
+          return;
+        }
+
+        // If block is due to iOS/Android standalone mode where window.open popups are blocked/unsupported
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+        if (isStandalone) {
+          setLoading(false);
+          setAuthHelpModal({
+            show: true,
+            title: "Restricție PWA Standalone",
+            message: "Sistemele mobile (iOS/Android) securizează aplicațiile standalone instalate și blokează ferestrele popup de autentificare.",
+            steps: [
+              "Recomandat: Apasă pe butonul de mai jos '🔑 Mod Oaspete' pentru a folosi instant cloud sync-ul fără cont Google.",
+              "Sau: Deschide aplicația în browser ca pagină web clasică, conectează-te cu Google, iar PWA-ul se va activa automat."
+            ]
+          });
+          return;
+        }
+
+        // Fallback to Redirect in case of standard browse blocks (like standard desktop safari blocks)
         localStorage.setItem("nutriscan_pending_redirect", "true");
-        setLoading(true);
-        signInWithRedirect(auth, provider);
+        signInWithRedirect(auth, provider).catch((redirectErr: any) => {
+          console.error("Redirect login failed:", redirectErr);
+          setLoading(false);
+          localStorage.removeItem("nutriscan_pending_redirect");
+          showToast("Autentificarea Google nu este disponibilă în acest context.");
+        });
+      })
+      .finally(() => {
+        // Only set loading to false if we are not actively redirecting away
+        if (localStorage.getItem("nutriscan_pending_redirect") !== "true") {
+          setLoading(false);
+        }
       });
   };
   const logout = () => {
@@ -330,7 +420,13 @@ export default function App() {
           <h1 className="text-xl font-bold tracking-tight text-white">NutriScan<span className="text-emerald-400">RO</span></h1>
         </div>
         {user ? (
-          <img src={user.photoURL || ""} className="w-8 h-8 rounded-full border border-white/10" />
+          user.isAnonymous ? (
+            <div className="w-8 h-8 bg-emerald-500/10 rounded-full border border-emerald-500/25 flex items-center justify-center text-xs shadow-md font-bold">
+              👤
+            </div>
+          ) : (
+            <img src={user.photoURL || ""} className="w-8 h-8 rounded-full border border-white/10" />
+          )
         ) : (
           <button onClick={login} className="p-2 bg-white/5 rounded-lg border border-white/10 text-white hover:bg-white/10 transition-colors">
             <LogIn size={18} />
@@ -843,20 +939,62 @@ export default function App() {
               <h2 className="text-lg font-bold text-white uppercase tracking-widest pl-1">Profil & Setări</h2>
               
               {user ? (
-                <div className="card-elegant flex items-center gap-4 bg-gradient-to-br from-[#1c1f26] to-[#0f1115]">
-                  <img src={user.photoURL || ""} className="w-14 h-14 rounded-2xl border border-white/10 shadow-lg" />
-                  <div>
-                    <h4 className="font-bold text-white">{user.displayName}</h4>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">{user.email}</p>
+                <div className="card-elegant flex items-center gap-4 bg-gradient-to-br from-[#1c1f26] to-[#0f1115] border border-white/5 relative overflow-hidden">
+                  <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-20 h-20 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
+                  
+                  {user.isAnonymous ? (
+                    <div className="w-14 h-14 bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 rounded-2xl border border-emerald-500/25 flex items-center justify-center text-xl shadow-lg shadow-emerald-500/5 flex-shrink-0 animate-pulse">
+                      👤
+                    </div>
+                  ) : (
+                    <img src={user.photoURL || ""} className="w-14 h-14 rounded-2xl border border-white/10 shadow-lg flex-shrink-0" />
+                  )}
+                  
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-white leading-tight">
+                      {user.isAnonymous ? "Profil Oaspete" : user.displayName}
+                    </h4>
+                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest leading-none flex items-center gap-1.5 pt-0.5">
+                      <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                      Sincronizare Cloud Activă
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tight leading-none pt-0.5">
+                      {user.isAnonymous ? "Cod ID: " + user.uid.slice(0, 8) : user.email}
+                    </p>
                   </div>
                 </div>
               ) : (
-                <div className="card-elegant bg-emerald-500/5 border-emerald-500/10 p-5 text-center space-y-4">
-                  <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
-                    <UserIcon className="text-emerald-400" size={20} />
+                <div className="card-elegant bg-[#1c1f26]/60 border border-white/5 p-6 text-center space-y-5 rounded-[24px]">
+                  <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.06)]">
+                    <UserIcon className="text-emerald-400" size={22} />
                   </div>
-                  <p className="text-xs font-medium text-slate-300">Conectează-te cu Google pentru a sincroniza profilul dietetic în cloud.</p>
-                  <button onClick={login} className="btn-elegant w-full py-3.5 text-xs uppercase tracking-widest cursor-pointer">Conectare Google</button>
+                  <div className="space-y-1.5 mx-auto max-w-[280px]">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-white leading-none">Cont de Utilizator</h3>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Pentru a salva profilul dietetic, istoricul scanărilor și lista de cumpărături securizat în Cloud Firestore.
+                    </p>
+                  </div>
+                  <div className="space-y-3 pt-1.5">
+                    <button 
+                      onClick={login} 
+                      className="btn-elegant w-full py-4 text-xs font-black uppercase tracking-widest cursor-pointer shadow-md shadow-emerald-500/10 hover:scale-[1.01] active:scale-98 transition-all flex items-center justify-center gap-2"
+                    >
+                      <LogIn size={15} /> Conectare cu Google
+                    </button>
+                    
+                    <div className="relative flex py-1 items-center">
+                      <div className="flex-grow border-t border-white/5"></div>
+                      <span className="flex-shrink mx-3 text-[9px] font-black uppercase tracking-widest text-[#a0aec0] leading-none">Sau folosește acum instant</span>
+                      <div className="flex-grow border-t border-white/5"></div>
+                    </div>
+
+                    <button 
+                      onClick={guestLogin} 
+                      className="w-full py-3.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 text-slate-200 hover:text-white transition-all text-2xs font-bold uppercase tracking-widest cursor-pointer hover:bg-white/10 active:scale-98"
+                    >
+                      👤 Autentificare ca Oaspete (Instant)
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -984,6 +1122,70 @@ export default function App() {
       </AnimatePresence>
 
       {/* Components Modals */}
+      <AnimatePresence>
+        {authHelpModal.show && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setAuthHelpModal(prev => ({ ...prev, show: false }))}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="w-full max-w-sm card-elegant bg-[#1c1f26] border border-white/10 p-6 rounded-[28px] text-left space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start gap-3">
+                <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center border border-emerald-500/25 text-emerald-400">
+                  <LogIn size={20} />
+                </div>
+                <button 
+                  onClick={() => setAuthHelpModal(prev => ({ ...prev, show: false }))}
+                  className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg text-xs font-bold uppercase tracking-widest leading-none border border-white/5 transition-all cursor-pointer"
+                >
+                  Închide
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-black uppercase tracking-widest text-white leading-tight">{authHelpModal.title}</h3>
+                <p className="text-xs text-slate-400 leading-normal">{authHelpModal.message}</p>
+              </div>
+
+              <div className="space-y-2 border-t border-white/5 pt-4">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#a0aec0] leading-none mb-1">Pași de urmat</h4>
+                <div className="space-y-2">
+                  {authHelpModal.steps.map((step, idx) => (
+                    <div key={idx} className="flex gap-2.5 items-start">
+                      <div className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black flex items-center justify-center mt-0.5 border border-emerald-500/10">
+                        {idx + 1}
+                      </div>
+                      <p className="text-[11px] font-medium text-slate-300 leading-tight">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/5">
+                <button 
+                  onClick={() => {
+                    haptics.playClick();
+                    setAuthHelpModal(prev => ({ ...prev, show: false }));
+                    guestLogin();
+                  }}
+                  className="w-full btn-elegant py-3.5 text-xs font-black uppercase tracking-widest shadow-md shadow-emerald-500/10 cursor-pointer text-center"
+                >
+                  🔑 Mod Oaspete (Recomandat)
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showScanner && (
           <Scanner 
