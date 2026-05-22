@@ -7,6 +7,7 @@ import { motion } from "motion/react";
 import { haptics } from "../lib/haptics";
 import { useState } from "react";
 import { checkDietaryConflicts } from "../lib/dietHelper";
+import { extractAdditives } from "../lib/additiveHelper";
 
 interface ProductDetailProps {
   product: Product;
@@ -26,6 +27,7 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList, u
   const nutrition = product?.nutrition || {};
 
   const conflicts = userPreferences ? checkDietaryConflicts(product, userPreferences) : [];
+  const detectedAdditives = extractAdditives(product.ingredients || "");
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -196,6 +198,92 @@ export default function ProductDetail({ product, onClose, onAddToShoppingList, u
             </div>
           </div>
         )}
+
+        {/* Food Additives Analyser & Toxicity Alerts (E-uri) */}
+        <div className="card-elegant space-y-4 p-5 relative overflow-hidden border border-white/5 bg-[#1c1f26]/80">
+          <div className="flex justify-between items-center pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🧪</span>
+              <div className="text-left">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#a0aec0] leading-none">Analizator de E-uri</h4>
+                <p className="text-xs font-bold text-white mt-1 leading-none">Aditivi & Toxicitate</p>
+              </div>
+            </div>
+            <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg ${
+              detectedAdditives.length === 0
+                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                : detectedAdditives.some(a => a.danger === "high")
+                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                  : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+            }`}>
+              {detectedAdditives.length === 0 
+                ? "Produs Curat" 
+                : `${detectedAdditives.length} Detectați`
+              }
+            </span>
+          </div>
+
+          {detectedAdditives.length === 0 ? (
+            <div className="flex gap-3 items-start py-1">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs flex-shrink-0 font-bold">
+                ✓
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-200 leading-tight">Zero aditivi periculoși monitorizați</p>
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  Acest produs nu conține conservanți nocivi, îndulcitori de sinteză cunoscuți sau potențiatori neurotoxici din baza noastră de date.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1">
+              <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                Următorii aditivi alimentari au fost detectați în lista de ingrediente:
+              </p>
+              <div className="space-y-2.5">
+                {detectedAdditives.map((additive) => {
+                  const isHigh = additive.danger === "high";
+                  const isMedium = additive.danger === "medium";
+                  const badgeColor = isHigh 
+                    ? "bg-rose-500/20 border-rose-500/35 text-rose-400" 
+                    : isMedium 
+                      ? "bg-yellow-500/20 border-yellow-500/35 text-yellow-400" 
+                      : "bg-emerald-500/20 border-emerald-500/35 text-emerald-400";
+                  
+                  const rowBorder = isHigh 
+                    ? "border-rose-500/15 bg-rose-500/[0.02]" 
+                    : isMedium 
+                      ? "border-yellow-500/15 bg-yellow-500/[0.02]" 
+                      : "border-emerald-500/15 bg-emerald-500/[0.02]";
+
+                  return (
+                    <div 
+                      key={additive.code} 
+                      className={`p-3 rounded-2xl border ${rowBorder} space-y-1.5 transition-all`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 border rounded-md ${badgeColor}`}>
+                            {additive.code}
+                          </span>
+                          <span className="text-xs font-black text-white leading-none">{additive.name}</span>
+                        </div>
+                        <span className={`text-[9.5px] font-black uppercase tracking-widest ${
+                          isHigh ? "text-rose-400" : isMedium ? "text-yellow-400" : "text-emerald-400"
+                        }`}>
+                          {isHigh ? "De Evitat" : isMedium ? "Precauție" : "Sigur"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-normal font-medium">
+                        {additive.description}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Warnings: Allergens */}
         {allergens.length > 0 && (

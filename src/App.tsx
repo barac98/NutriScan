@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { 
   Scan, History as HistoryIcon, ShoppingCart, 
   Settings as SettingsIcon, LogIn, LogOut, Plus, Trash2, 
-  User as UserIcon, Star, MessageSquare, Upload, BarChart3 
+  User as UserIcon, Star, MessageSquare, Upload, BarChart3,
+  Sparkles, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -32,6 +33,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [scanMode, setScanMode] = useState<"camera" | "upload">("camera");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [rawImportText, setRawImportText] = useState("");
+  const [importImage, setImportImage] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [extractedItems, setExtractedItems] = useState<{ id: string; name: string; selected: boolean }[]>([]);
+  const [activeImportTab, setActiveImportTab] = useState<"text" | "image">("text");
   const [authHelpModal, setAuthHelpModal] = useState<{
     show: boolean;
     title: string;
@@ -319,13 +326,29 @@ export default function App() {
       // Save to history if logged in
       if (user) {
         try {
-          await addDoc(collection(db, "histories"), {
-            userId: user.uid,
-            barcode: result.barcode || data.barcode || "N/A",
-            productName: result.name,
-            healthScore: result.healthScore,
-            scannedAt: new Date().toISOString()
-          });
+          const barcodeToSave = result.barcode || data.barcode || "N/A";
+          // Check if product is already in the history list (by barcode or by exact name and score if barcode is N/A)
+          const existingItem = barcodeToSave !== "N/A"
+            ? history.find(h => h.barcode === barcodeToSave)
+            : history.find(h => h.productName === result.name && h.barcode === "N/A");
+
+          if (existingItem) {
+            // Update existing entry's timestamp (and potentially names or score details if they were refined)
+            await updateDoc(doc(db, "histories", existingItem.id), {
+              scannedAt: new Date().toISOString(),
+              productName: result.name,
+              healthScore: result.healthScore
+            });
+          } else {
+            // Add as a new history item
+            await addDoc(collection(db, "histories"), {
+              userId: user.uid,
+              barcode: barcodeToSave,
+              productName: result.name,
+              healthScore: result.healthScore,
+              scannedAt: new Date().toISOString()
+            });
+          }
         } catch (err) {
           handleFirestoreError(err, OperationType.CREATE, "histories");
         }
@@ -377,6 +400,104 @@ export default function App() {
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, "shoppingLists");
+    }
+  };
+
+  const handleAIImport = async () => {
+    if (!user) {
+      showToast("Te rugăm să te autentifici pentru a folosi această funcție.");
+      return;
+    }
+    if (activeImportTab === "text" && !rawImportText.trim()) {
+      showToast("Te rugăm să introduci textul mesajului.");
+      return;
+    }
+    if (activeImportTab === "image" && !importImage) {
+      showToast("Te rugăm să încarci un screenshot.");
+      return;
+    }
+
+    setIsImporting(true);
+    setExtractedItems([]);
+    
+    try {
+      const response = await fetch("/api/import-shopping-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: activeImportTab === "text" ? rawImportText : undefined,
+          image: activeImportTab === "image" ? importImage : undefined
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Eroare la procesarea listei de cumpărături.");
+      }
+
+      const data = await response.json();
+      if (data && Array.isArray(data.items)) {
+        if (data.items.length === 0) {
+          showToast("Nu s-au putut identifica produse. Încearcă să detaliezi textul.");
+        } else {
+          setExtractedItems(data.items.map((name: string, idx: number) => ({
+            id: `${Date.now()}-${idx}`,
+            name,
+            selected: true
+          })));
+        }
+      } else {
+        throw new Error("Formatul răspunsului este nevalid.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Eroare la importul inteligent.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const confirmAIImport = async () => {
+    const selectedItems = extractedItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      showToast("Niciun produs selectat pentru import.");
+      return;
+    }
+
+    let successCount = 0;
+    for (const item of selectedItems) {
+      try {
+        await addDoc(collection(db, "shoppingLists"), {
+          userId: user?.uid,
+          name: item.name,
+          barcode: null,
+          checked: false,
+          createdAt: new Date().toISOString()
+        });
+        successCount++;
+      } catch (err) {
+        console.error("Failed importing item name:", item.name, err);
+      }
+    }
+
+    showToast(`Am importat cu succes ${successCount} produse.`);
+    setRawImportText("");
+    setImportImage(null);
+    setExtractedItems([]);
+    setShowImportPanel(false);
+  };
+
+  const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsImporting(true);
+      const enhanced = await processAndEnhanceImage(file);
+      setImportImage(enhanced.base64);
+    } catch (err: any) {
+      console.error("Error processing screenshot file:", err);
+      showToast("Nu s-a putut procesa imaginea. Te rugăm să încerci din nou.");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -599,27 +720,6 @@ export default function App() {
                 </div>
               )}
               
-              <div className="grid grid-cols-2 gap-4">
-                   <div className="card-elegant bg-[#1c1f26] p-4 text-center">
-                      <div className="text-xl mb-1 text-emerald-400">🥗</div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nutriție</p>
-                   </div>
-                   <div className="card-elegant bg-[#1c1f26] p-4 text-center">
-                      <div className="text-xl mb-1 text-sky-400">🌍</div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sustenabil</p>
-                   </div>
-                </div>
-              </div>
-
-              {/* Tips Section */}
-              <div className="space-y-3">
-                <h3 className="font-bold text-white text-xs uppercase tracking-widest pl-1">Sfaturi Rapide</h3>
-                <div className="card-elegant py-4 border-l-4 border-l-emerald-500">
-                  <p className="text-xs font-medium text-slate-300">📌 Verifică zahărul adăugat chiar și în produsele "naturale".</p>
-                </div>
-                <div className="card-elegant py-4 border-l-4 border-l-emerald-500">
-                  <p className="text-xs font-medium text-slate-300">📌 Caută ingrediente precum ulei de palmier pentru sustenabilitate.</p>
-                </div>
               </div>
             </motion.div>
           )}
@@ -860,7 +960,224 @@ export default function App() {
                animate={{ opacity: 1, y: 0 }}
                className="p-6 space-y-4"
             >
-              <h2 className="text-lg font-bold text-white uppercase tracking-widest pl-1">Listă Cumpărături</h2>
+              <div className="flex justify-between items-center pl-1">
+                <h2 className="text-lg font-bold text-white uppercase tracking-widest">Listă Cumpărături</h2>
+                <button
+                  onClick={() => {
+                    haptics.playClick();
+                    setShowImportPanel(!showImportPanel);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-wider leading-none hover:bg-emerald-500/25 transition-all cursor-pointer"
+                >
+                  <Sparkles size={11} className="text-emerald-400" />
+                  <span>Importă WhatsApp (AI)</span>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {showImportPanel && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="card-elegant border border-emerald-500/20 bg-emerald-500/[0.03] p-4 space-y-4 rounded-3xl">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs">✨</span>
+                          <p className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">Detector WhatsApp AI</p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            haptics.playClick();
+                            setShowImportPanel(false);
+                          }} 
+                          className="text-slate-400 hover:text-white transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {/* Tab Selection */}
+                      <div className="grid grid-cols-2 gap-1.5 bg-[#0f1115] p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            haptics.playSelect();
+                            setActiveImportTab("text");
+                          }}
+                          className={`py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                            activeImportTab === "text" 
+                              ? "bg-[#1c1f26] text-white" 
+                              : "text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          📋 Copiază Text
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            haptics.playSelect();
+                            setActiveImportTab("image");
+                          }}
+                          className={`py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                            activeImportTab === "image" 
+                              ? "bg-[#1c1f26] text-white" 
+                              : "text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          📸 Screenshot Mesaj
+                        </button>
+                      </div>
+
+                      {/* Tab Contents: Text */}
+                      {activeImportTab === "text" && (
+                        <div className="space-y-2 text-left">
+                          <p className="text-[10px] text-slate-400 leading-normal">
+                            Lipește textul trimis de soție sau textul copiat din WhatsApp. Gemini va identifica automat elementele!
+                          </p>
+                          <textarea
+                            value={rawImportText}
+                            onChange={(e) => setRawImportText(e.target.value)}
+                            placeholder="Ex: ia te rog o paine toast feliata de la loto, 1l lapte gras, 3 iaurturi si niste kiwi daca gasesti"
+                            className="input-elegant w-full h-24 p-3 text-xs resize-none text-slate-200 border border-white/5 bg-[#0f1115] hover:border-white/10 focus:border-emerald-500/40 rounded-2xl"
+                          />
+                        </div>
+                      )}
+
+                      {/* Tab Contents: Image */}
+                      {activeImportTab === "image" && (
+                        <div className="space-y-2 text-left">
+                          <p className="text-[10px] text-slate-400 leading-normal">
+                            Încarcă o captură de ecran din WhatsApp. AI-ul va scana imaginea și va extrage produsele listate în conversație.
+                          </p>
+                          {!importImage ? (
+                            <label className="flex flex-col items-center justify-center border border-dashed border-white/10 rounded-2xl p-6 bg-[#0f1115] hover:bg-white/[0.02] hover:border-emerald-500/20 transition-all cursor-pointer">
+                              <Upload size={20} className="text-slate-500 mb-1" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Încarcă Screenshot</span>
+                              <span className="text-[9px] text-slate-500 mt-0.5">Suportă imagini standard (screenshot)</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleScreenshotUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          ) : (
+                            <div className="relative rounded-2xl overflow-hidden border border-white/5 bg-[#0f1115] p-2 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <img src={importImage} className="w-12 h-12 object-cover rounded-xl border border-white/10" />
+                                <div className="text-left">
+                                  <p className="text-[10px] font-bold text-slate-200">Imagine încărcată</p>
+                                  <p className="text-[9px] text-slate-500">Pregătită pentru extragere</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  haptics.playClick();
+                                  setImportImage(null);
+                                }}
+                                className="p-1 px-2.5 text-[10px] font-bold text-rose-400 hover:bg-rose-500/10 border border-rose-500/15 rounded-lg transition-colors cursor-pointer"
+                              >
+                                Şterge
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Submit button when not showing extracted items yet */}
+                      {extractedItems.length === 0 && (
+                        <button
+                          type="button"
+                          disabled={isImporting}
+                          onClick={handleAIImport}
+                          className="btn-elegant w-full py-3 text-xs bg-emerald-500 text-[#0f1115] hover:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/5 cursor-pointer"
+                        >
+                          {isImporting ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-[#0f1115]/30 border-t-[#0f1115] rounded-full animate-spin" />
+                              <span>Se analizează cu AI-ul...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={14} />
+                              <span>Extrage Listă Produse</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {/* Extracted Items Confirmation List */}
+                      {extractedItems.length > 0 && (
+                        <div className="space-y-3 pt-2 border-t border-white/5 text-left">
+                          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-[#a0aec0]">
+                            <span>Produse Detectate ({extractedItems.filter(e => e.selected).length})</span>
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                haptics.playSelect();
+                                const allSelected = extractedItems.every(i => i.selected);
+                                setExtractedItems(extractedItems.map(i => ({ ...i, selected: !allSelected })));
+                              }}
+                              className="text-emerald-400 hover:underline cursor-pointer"
+                            >
+                              {extractedItems.every(i => i.selected) ? "Deselectează tot" : "Selectează tot"}
+                            </button>
+                          </div>
+
+                          <div className="max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin pr-1">
+                            {extractedItems.map((item, idx) => (
+                              <div 
+                                key={item.id}
+                                onClick={() => {
+                                  haptics.playSelect();
+                                  setExtractedItems(extractedItems.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it));
+                                }}
+                                className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                                  item.selected 
+                                    ? "bg-emerald-500/5 border-emerald-500/20 text-white" 
+                                    : "bg-[#0f1115] border-white/5 text-slate-500"
+                                }`}
+                              >
+                                <span className="text-xs font-semibold">{item.name}</span>
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                  item.selected ? "border-emerald-500 bg-emerald-500 text-[#0f1115]" : "border-white/10"
+                                }`}>
+                                  {item.selected && <div className="w-1.5 h-1.5 bg-[#0f1115] rounded-xs" />}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                haptics.playClick();
+                                setExtractedItems([]);
+                              }}
+                              className="btn-elegant w-full py-2.5 text-xs text-slate-400 border border-white/5 hover:bg-white/[0.02]"
+                            >
+                              Reîncearcă
+                            </button>
+                            <button
+                              type="button"
+                              onClick={confirmAIImport}
+                              className="btn-[#0f1115] w-full py-2.5 text-xs bg-emerald-500 hover:bg-emerald-400 font-bold rounded-xl active:scale-95 transition-all text-[#0f1115] cursor-pointer text-center flex items-center justify-center"
+                            >
+                              Adaugă în Listă
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {!user && (
                 <div className="card-elegant bg-rose-500/5 border-rose-500/10 p-10 text-center space-y-4">
                    <p className="text-sm font-medium text-slate-400">Autentifică-te pentru lista de cumpărături.</p>

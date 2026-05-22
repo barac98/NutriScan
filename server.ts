@@ -252,6 +252,75 @@ CRITICAL INSTRUCȚIUNI EXTRAGERE:
   }
 });
 
+// API: Parse a text message or a screenshot to extract shopping list items
+app.post("/api/import-shopping-list", async (req, res) => {
+  const { text, image } = req.body;
+
+  try {
+    let prompt = "Analizează acest mesaj sau imagine pentru a extrage o listă de produse sau alimente pe care utilizatorul trebuie să le cumpere.";
+    prompt += "\nIdentifică produsele individuale, corectează eventualele greșeli de ortografie tipice tastatului rapid pe telefon și capitalizează numele fiecărui produs (de exemplu, converti 'ia s tu nste lapte, paine, mere si 1kg ceapa' în ['Lapte', 'Pâine', 'Mere', 'Ceapă 1kg']).";
+    prompt += "\nRăspunsul tău trebuie să fie strict în limba Română, în format JSON conform schemei furnizate.";
+
+    if (text) {
+      prompt += `\nMesaj text: ${text}`;
+    }
+
+    const contents: any[] = [{ text: prompt }];
+    if (image) {
+      contents.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: image,
+        },
+      });
+    }
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: { parts: contents },
+      config: {
+        systemInstruction: "Ești un asistent util român de elită. Extrage o listă clară, ordonată de produse de cumpărături din schițe, mesaje WhatsApp, text dezordonat sau capturi de ecran (screenshot-uri). Numele produselor extrase trebuie să fie concise, curate, scrise corect gramatical în română și fără detalii irelevante de genul 'ia' sau 'te rog'.",
+        responseMimeType: "application/json",
+        maxOutputTokens: 1024,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            items: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Lista de produse extrase din text sau ecran."
+            }
+          },
+          required: ["items"]
+        }
+      }
+    });
+
+    const responseText = response.text || "{}";
+    
+    let parsed: any = { items: [] };
+    try {
+      let cleaned = responseText.trim();
+      if (cleaned.startsWith("```json")) {
+        cleaned = cleaned.substring(7);
+      } else if (cleaned.startsWith("```")) {
+        cleaned = cleaned.substring(3);
+      }
+      if (cleaned.endsWith("```")) {
+        cleaned = cleaned.substring(0, cleaned.length - 3);
+      }
+      parsed = JSON.parse(cleaned.trim());
+    } catch (parseErr) {
+      console.error("Failed to parse shopping list json response:", responseText, parseErr);
+    }
+
+    res.json(parsed);
+  } catch (error: any) {
+    console.error("Gemini shopping list importer error:", error);
+    res.status(500).json({ error: "Eroare la procesarea listei de cumpărături." });
+  }
+});
+
 async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
